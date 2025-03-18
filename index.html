@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport"
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Enhanced Space Shooter</title>
+  <title>Enhanced Space Shooter (No Pause)</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
     
@@ -40,24 +40,6 @@
       margin: 0 auto;
       image-rendering: crisp-edges;
     }
-    
-    /* Pause Overlay */
-    #pauseScreen {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.7);
-      color: #fff;
-      font-size: 48px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 150;
-      cursor: pointer; /* So user knows it’s tappable */
-    }
   </style>
 </head>
 <body>
@@ -68,9 +50,6 @@
     COMBO: <span id="combo">0</span>
   </div>
   <canvas id="gameCanvas"></canvas>
-  
-  <!-- Pause Overlay (Tap or click to resume) -->
-  <div id="pauseScreen">Paused</div>
   
   <script>
     /*****************************************
@@ -112,7 +91,6 @@
     let lives = 3;
     let gameActive = false;
     let gameStarted = false;
-    let paused = false; // Start unpaused
     
     // Extra ship mechanic
     let shipCount = 1;
@@ -129,7 +107,7 @@
       }
     });
     
-    // Set canvas size on load and resize
+    // Set canvas size
     function setCanvasSize() {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
@@ -174,7 +152,7 @@
     let shieldTime = 0;
     
     /*****************************************
-     * Parallax Starfield
+     * Starfield
      *****************************************/
     const starLayers = {
       foreground: [],
@@ -211,6 +189,7 @@
         }
       }
     }
+    
     function drawStarLayers() {
       ctx.fillStyle = "#fff";
       for (let layer in starLayers) {
@@ -247,6 +226,7 @@
         }
       }
     }
+    
     function drawNebula() {
       if (nebulaActive || nebulaOpacity > 0) {
         ctx.fillStyle = `rgba(128, 0, 128, ${nebulaOpacity})`;
@@ -258,20 +238,20 @@
      * Player Controls (Mouse & Touch)
      *****************************************/
     canvas.addEventListener('mousemove', (e) => {
-      if (!gameActive || paused) return;
+      if (!gameActive) return;
       player.x = e.clientX;
       player.y = e.clientY;
     });
     canvas.addEventListener('touchmove', (e) => {
-      if (!gameActive || paused) return;
+      if (!gameActive) return;
       const touch = e.touches[0];
       player.x = touch.clientX;
       player.y = touch.clientY;
-      e.preventDefault(); // Prevent scrolling
+      e.preventDefault();
     }, { passive: false });
     
     function shootBullet() {
-      if (!gameActive || paused) return;
+      if (!gameActive) return;
       shootSound.play();
       if (shipCount === 1) {
         bullets.push({ x: player.x, y: player.y, width: 5, height: 15, speed: 10 });
@@ -281,12 +261,10 @@
         bullets.push({ x: player.x + offset, y: player.y, width: 5, height: 15, speed: 10 });
       }
     }
-    // Mouse click to shoot
     canvas.addEventListener('click', () => {
       if (!gameStarted) return;
       shootBullet();
     });
-    // Touch start to shoot
     canvas.addEventListener('touchstart', () => {
       if (!gameStarted) return;
       shootBullet();
@@ -380,7 +358,7 @@
      *****************************************/
     // Regular meteor
     setInterval(() => {
-      if (!gameActive || paused) return;
+      if (!gameActive) return;
       enemies.push({
         x: Math.random() * canvas.width,
         y: 0,
@@ -394,7 +372,7 @@
     
     // Shield power-up
     function spawnPowerUp() {
-      if (gameActive && !paused && Math.random() < 0.002) {
+      if (gameActive && Math.random() < 0.002) {
         powerUps.push({
           x: Math.random() * canvas.width,
           y: 0,
@@ -449,7 +427,7 @@
      * Game Update & Draw
      *****************************************/
     function updateGame() {
-      if (!gameActive || paused) return;
+      if (!gameActive) return;
       
       updateNebula();
       updateStarLayers();
@@ -638,9 +616,6 @@
           comboElement.textContent = comboCount;
         }
       }
-      
-      updateParticles();
-      updateAmbientParticles();
     }
     
     function drawGame() {
@@ -681,4 +656,23 @@
         let offset = player.size * 0.8;
         ctx.drawImage(
           spriteSheet,
-          sprites.spaceship.x, sprites.spaceship.y, sprites.sp
+          sprites.spaceship.x, sprites.spaceship.y, sprites.spaceship.width, sprites.spaceship.height,
+          player.x - offset - player.size / 2, player.y - player.size / 2, player.size, player.size
+        );
+        ctx.drawImage(
+          spriteSheet,
+          sprites.spaceship.x, sprites.spaceship.y, sprites.spaceship.width, sprites.spaceship.height,
+          player.x + offset - player.size / 2, player.y - player.size / 2, player.size, player.size
+        );
+      }
+      
+      // Shield ring
+      if (shieldTime > 0) {
+        shieldHue = (shieldHue + 10) % 360;
+        shieldRotation += 0.1;
+        ctx.strokeStyle = `hsl(${shieldHue}, 100%, 50%)`;
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        let gapAngle = Math.PI / 4;
+        if (shipCount === 1) {
+          le
