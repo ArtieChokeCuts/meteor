@@ -242,10 +242,10 @@
       player.x = e.clientX;
       player.y = e.clientY;
     });
-    // Increase upward offset for touch events (set to 200 pixels here)
+    // Increase upward offset for touch events (set to 100 pixels here)
     canvas.addEventListener('touchmove', (e) => {
       if (!gameActive) return;
-      const touch = e.touches[0];
+      const touch = e.touches[100];
       const touchOffset = 200; // Increase this value if needed
       player.x = touch.clientX;
       player.y = touch.clientY - touchOffset;
