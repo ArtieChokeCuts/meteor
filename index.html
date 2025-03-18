@@ -56,6 +56,7 @@
       align-items: center;
       justify-content: center;
       z-index: 150;
+      cursor: pointer;
     }
   </style>
 </head>
@@ -68,7 +69,7 @@
   </div>
   <canvas id="gameCanvas"></canvas>
   
-  <!-- Pause Overlay -->
+  <!-- Pause Overlay (Tap to resume on mobile) -->
   <div id="pauseScreen">Paused</div>
   
   <script>
@@ -121,14 +122,14 @@
     highScoreElement.textContent = highScore;
     livesElement.textContent = lives;
     
-    // Start background music on user interaction
+    // Start background music on any click/tap
     document.addEventListener('click', () => {
       if (backgroundMusic.paused) {
         backgroundMusic.play().catch(error => console.log("Audio playback requires user interaction"));
       }
     });
     
-    // Set canvas size
+    // Set canvas size on load and resize
     function setCanvasSize() {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
@@ -169,7 +170,7 @@
     const extraShips = [];
     const ambientParticles = [];
     
-    // Shield timer (frames)
+    // Shield timer (in frames)
     let shieldTime = 0;
     
     /*****************************************
@@ -268,7 +269,7 @@
       const touch = e.touches[0];
       player.x = touch.clientX;
       player.y = touch.clientY;
-      e.preventDefault();
+      e.preventDefault(); // Prevent scrolling
     }, { passive: false });
     
     function shootBullet() {
@@ -414,7 +415,7 @@
       });
     }
     
-    // Large meteor power-up
+    // Large meteor
     function spawnLargeMeteor() {
       enemies.push({
         x: Math.random() * canvas.width,
@@ -536,7 +537,7 @@
           }
         });
         
-        // Explosion animation for enemy
+        // Explosion animation
         if (e.exploded) {
           e.frame++;
           const framesNeeded = (e.type === "large") ? 20 : sprites.asteroidExploding.length * 10;
@@ -647,7 +648,7 @@
       drawStarLayers();
       drawNebula();
       
-      // Draw shield power-up objects
+      // Draw shield power-ups
       powerUps.forEach(p => {
         ctx.fillStyle = "blue";
         ctx.beginPath();
@@ -680,7 +681,4 @@
         ctx.drawImage(
           spriteSheet,
           sprites.spaceship.x, sprites.spaceship.y, sprites.spaceship.width, sprites.spaceship.height,
-          player.x - offset - player.size / 2, player.y - player.size / 2, player.size, player.size
-        );
-        ctx.drawImage(
-          spriteSheet
+          player.x - offset - player.size / 2, player.y - player.size / 2, player.size, play
