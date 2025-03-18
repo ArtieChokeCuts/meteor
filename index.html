@@ -100,14 +100,14 @@
     highScoreElement.textContent = highScore;
     livesElement.textContent = lives;
     
-    // Start background music on user interaction
+    // Start background music on any click/tap
     document.addEventListener('click', () => {
       if (backgroundMusic.paused) {
         backgroundMusic.play().catch(error => console.log("Audio playback requires user interaction"));
       }
     });
     
-    // Set canvas size
+    // Set canvas size on load and resize
     function setCanvasSize() {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
@@ -242,12 +242,15 @@
       player.x = e.clientX;
       player.y = e.clientY;
     });
+    
+    // For touch events, add an upward offset so the ship appears above your finger.
     canvas.addEventListener('touchmove', (e) => {
       if (!gameActive) return;
       const touch = e.touches[0];
+      const offset = 50; // Adjust this value as needed
       player.x = touch.clientX;
-      player.y = touch.clientY;
-      e.preventDefault();
+      player.y = touch.clientY - offset;
+      e.preventDefault(); // Prevent scrolling
     }, { passive: false });
     
     function shootBullet() {
@@ -261,6 +264,7 @@
         bullets.push({ x: player.x + offset, y: player.y, width: 5, height: 15, speed: 10 });
       }
     }
+    
     canvas.addEventListener('click', () => {
       if (!gameStarted) return;
       shootBullet();
@@ -354,7 +358,7 @@
     }
     
     /*****************************************
-     * Spawning
+     * Spawning Functions
      *****************************************/
     // Regular meteor
     setInterval(() => {
@@ -516,7 +520,7 @@
           }
         });
         
-        // Explosion animation
+        // Explosion animation for enemy
         if (e.exploded) {
           e.frame++;
           const framesNeeded = (e.type === "large") ? 20 : sprites.asteroidExploding.length * 10;
@@ -525,7 +529,7 @@
           }
         }
         
-        // Player collision
+        // Player collision detection
         if (!e.exploded) {
           let collisionHappened = false;
           if (shipCount === 1) {
@@ -582,7 +586,7 @@
         }
       });
       
-      // Extra ship power-ups
+      // Update extra ship power-ups
       if (score >= nextExtraShipScore && shipCount < 2) {
         spawnExtraShip();
         nextExtraShipScore += 1000;
@@ -605,10 +609,10 @@
         spawnLargeMeteor();
       }
       
-      // Shield timer
+      // Update shield timer
       if (shieldTime > 0) shieldTime--;
       
-      // Combo timer
+      // Update combo timer
       if (comboCount > 0) {
         comboTimer--;
         if (comboTimer <= 0) {
@@ -616,6 +620,9 @@
           comboElement.textContent = comboCount;
         }
       }
+      
+      updateParticles();
+      updateAmbientParticles();
     }
     
     function drawGame() {
@@ -624,7 +631,7 @@
       drawStarLayers();
       drawNebula();
       
-      // Shield power-ups
+      // Draw shield power-up objects
       powerUps.forEach(p => {
         ctx.fillStyle = "blue";
         ctx.beginPath();
@@ -632,7 +639,7 @@
         ctx.fill();
       });
       
-      // Extra ship power-ups
+      // Draw extra ship power-ups
       extraShips.forEach(es => {
         ctx.save();
         ctx.translate(es.x, es.y);
@@ -645,7 +652,7 @@
         ctx.restore();
       });
       
-      // Player spaceship(s)
+      // Draw player spaceship(s)
       if (shipCount === 1) {
         ctx.drawImage(
           spriteSheet,
@@ -666,7 +673,7 @@
         );
       }
       
-      // Shield ring
+      // Draw shield ring
       if (shieldTime > 0) {
         shieldHue = (shieldHue + 10) % 360;
         shieldRotation += 0.1;
@@ -685,7 +692,7 @@
         ctx.stroke();
       }
       
-      // Bullets
+      // Draw bullets
       bullets.forEach(b => {
         if (b.transformed) {
           ctx.fillStyle = "orange";
@@ -704,7 +711,7 @@
         }
       });
       
-      // Enemies
+      // Draw enemies
       enemies.forEach(e => {
         ctx.save();
         ctx.translate(e.x, e.y);
@@ -718,11 +725,11 @@
         ctx.restore();
       });
       
-      // Explosion & ambient particles
+      // Draw explosion and ambient particles
       drawParticles();
       drawAmbientParticles();
       
-      // Shield bar & timer
+      // Draw shield bar & timer
       if (shieldTime > 0) {
         const totalShieldTime = 300;
         let percent = shieldTime / totalShieldTime;
@@ -756,8 +763,43 @@
       }, 2000);
     }
     
+    /*****************************************
+     * Start Screen Overlay & Pause (For reference)
+     *****************************************/
+    // If you want to use a start screen with pauses, you can uncomment and use this code.
+    // For now, this version auto-starts and has no pause overlay.
+    //
+    // const startScreen = document.getElementById('startScreen');
+    // function onStartScreenTap(e) {
+    //   console.log("Start screen tapped!");
+    //   startScreen.style.display = "none";
+    //   startGame();
+    // }
+    // startScreen.addEventListener('click', onStartScreenTap, { passive: false });
+    // startScreen.addEventListener('touchstart', onStartScreenTap, { passive: false });
+    //
+    // const pauseScreen = document.getElementById('pauseScreen');
+    // document.addEventListener('keydown', function(e) {
+    //   if (e.key.toLowerCase() === 'p') {
+    //     paused = !paused;
+    //     pauseScreen.style.display = paused ? "flex" : "none";
+    //   }
+    // });
+    // pauseScreen.addEventListener('click', () => {
+    //   paused = false;
+    //   pauseScreen.style.display = "none";
+    // });
+    // pauseScreen.addEventListener('touchstart', (e) => {
+    //   e.preventDefault();
+    //   paused = false;
+    //   pauseScreen.style.display = "none";
+    // }, { passive: false });
+    
+    /*****************************************
+     * Start Game Immediately
+     *****************************************/
     function startGame() {
-      console.log("Starting game with no pause logic...");
+      console.log("Starting game with start screen overlay...");
       score = 0;
       lives = 3;
       shieldTime = 0;
@@ -784,13 +826,14 @@
       }
     }
     
-    // Automatically start on load
+    // Auto-start the game when the page loads.
     window.addEventListener('load', () => {
+      console.log("Window loaded, starting game...");
       startGame();
     });
     
     spriteSheet.onload = () => {
-      console.log("Assets loaded, game is ready (no pause).");
+      console.log("Assets loaded, game is ready.");
     };
   </script>
 </body>
