@@ -85,7 +85,6 @@
     LIVES: <span id="lives">3</span> |
     COMBO: <span id="combo">0</span>
   </div>
-  
   <canvas id="gameCanvas"></canvas>
   
   <!-- Start Screen -->
@@ -280,6 +279,7 @@
         }
       }
     }
+    
     function drawNebula() {
       if (nebulaActive || nebulaOpacity > 0) {
         ctx.fillStyle = `rgba(128, 0, 128, ${nebulaOpacity})`;
@@ -300,7 +300,7 @@
       const touch = e.touches[0];
       player.x = touch.clientX;
       player.y = touch.clientY;
-      e.preventDefault();  // prevents scrolling
+      e.preventDefault();
     }, { passive: false });
     
     function shootBullet() {
@@ -314,6 +314,7 @@
         bullets.push({ x: player.x + offset, y: player.y, width: 5, height: 15, speed: 10 });
       }
     }
+    
     canvas.addEventListener('click', () => {
       if (!gameStarted) return;
       shootBullet();
@@ -406,7 +407,7 @@
     }
     
     /*****************************************
-     * Spawning
+     * Spawning Functions
      *****************************************/
     // Regular meteor
     setInterval(() => {
@@ -434,7 +435,7 @@
       }
     }
     
-    // Extra ship
+    // Extra ship power-up
     function spawnExtraShip() {
       extraShips.push({
         x: Math.random() * canvas.width,
@@ -446,7 +447,7 @@
       });
     }
     
-    // Large meteor
+    // Large meteor power-up
     function spawnLargeMeteor() {
       enemies.push({
         x: Math.random() * canvas.width,
@@ -464,7 +465,7 @@
     }
     
     /*****************************************
-     * Collision
+     * Collision Detection
      *****************************************/
     function checkCollision(a, b) {
       const aSize = a.size || a.width;
@@ -484,12 +485,11 @@
       updateNebula();
       updateStarLayers();
       
-      // Ambient
       if (Math.random() < 0.3) {
         createAmbientParticle();
       }
       
-      // Bullets
+      // Update bullets
       bullets.forEach((b, i) => {
         if (b.transformed) {
           b.transformationTimer--;
@@ -504,23 +504,21 @@
         }
       });
       
-      // Enemies
+      // Update enemies
       enemies.forEach((e, i) => {
         if (!e.exploded) {
           e.y += 3;
           e.rotation += e.rotationSpeed;
-          // Large meteor bounce
           if (e.type === "large") {
             e.x += e.vx;
             e.vx *= 0.95;
           }
         }
         
-        // Bullet collisions
+        // Check bullet collisions
         bullets.forEach((b, j) => {
           if (checkCollision(b, e) && !e.exploded) {
             if (e.type === "large") {
-              // Large meteor logic
               if (!b.hasBounced) {
                 b.hasBounced = true;
                 b.speed = -b.speed;
@@ -551,7 +549,6 @@
                 bullets.splice(j, 1);
               }
             } else {
-              // Regular meteor
               explosionSound.play();
               e.exploded = true;
               e.frame = 0;
@@ -624,12 +621,12 @@
         }
       });
       
-      // Shield power-ups
+      // Update shield power-ups
       spawnPowerUp();
       powerUps.forEach((p, i) => {
         p.y += p.speed;
         if (checkCollision({x: p.x, y: p.y, size: p.size},
-                          {x: player.x, y: player.y, size: player.size})) {
+                           {x: player.x, y: player.y, size: player.size})) {
           shieldTime = 300;
           powerUps.splice(i, 1);
         }
@@ -638,7 +635,7 @@
         }
       });
       
-      // Extra ship
+      // Extra ship power-ups
       if (score >= nextExtraShipScore && shipCount < 2) {
         spawnExtraShip();
         nextExtraShipScore += 1000;
@@ -647,7 +644,7 @@
         es.y += es.speed;
         es.rotation += es.rotationSpeed;
         if (checkCollision({x: es.x, y: es.y, size: es.size},
-                          {x: player.x, y: player.y, size: player.size})) {
+                           {x: player.x, y: player.y, size: player.size})) {
           shipCount = 2;
           extraShips.splice(i, 1);
         }
@@ -656,15 +653,15 @@
         }
       });
       
-      // Large meteors
+      // Spawn large meteors
       if (score >= nextLargeMeteorScore) {
         spawnLargeMeteor();
       }
       
-      // Shield timer
+      // Update shield timer
       if (shieldTime > 0) shieldTime--;
       
-      // Combo timer
+      // Update combo timer
       if (comboCount > 0) {
         comboTimer--;
         if (comboTimer <= 0) {
@@ -683,8 +680,10 @@
       drawStarLayers();
       drawNebula();
       
-      // Shield power-up objects
+      // Draw shield power-ups
       powerUps.forEach(p => {
         ctx.fillStyle = "blue";
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size / 2, 0, 
+        ctx.arc(p.x, p.y, p.size / 2, 0, Math.PI * 2);
+        ctx.fill();
+     
