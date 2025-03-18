@@ -246,7 +246,7 @@
     canvas.addEventListener('touchmove', (e) => {
       if (!gameActive) return;
       const touch = e.touches[0];
-      const touchOffset = 100; // Increase this value if needed
+      const touchOffset = 200; // Increase this value if needed
       player.x = touch.clientX;
       player.y = touch.clientY - touchOffset;
       e.preventDefault(); // Prevent scrolling
