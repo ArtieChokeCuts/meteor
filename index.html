@@ -242,14 +242,13 @@
       player.x = e.clientX;
       player.y = e.clientY;
     });
-    
-    // For touch events, add an upward offset so the ship appears above your finger.
+    // Increase upward offset for touch events (set to 100 pixels here)
     canvas.addEventListener('touchmove', (e) => {
       if (!gameActive) return;
       const touch = e.touches[0];
-      const offset = 50; // Adjust this value as needed
+      const touchOffset = 100; // Increase this value if needed
       player.x = touch.clientX;
-      player.y = touch.clientY - offset;
+      player.y = touch.clientY - touchOffset;
       e.preventDefault(); // Prevent scrolling
     }, { passive: false });
     
@@ -520,7 +519,7 @@
           }
         });
         
-        // Explosion animation for enemy
+        // Explosion animation
         if (e.exploded) {
           e.frame++;
           const framesNeeded = (e.type === "large") ? 20 : sprites.asteroidExploding.length * 10;
@@ -631,7 +630,7 @@
       drawStarLayers();
       drawNebula();
       
-      // Draw shield power-up objects
+      // Draw shield power-ups
       powerUps.forEach(p => {
         ctx.fillStyle = "blue";
         ctx.beginPath();
@@ -766,8 +765,8 @@
     /*****************************************
      * Start Screen Overlay & Pause (For reference)
      *****************************************/
-    // If you want to use a start screen with pauses, you can uncomment and use this code.
-    // For now, this version auto-starts and has no pause overlay.
+    // If you wish to use a start screen with pause functionality,
+    // uncomment the code below and comment out the auto-start.
     //
     // const startScreen = document.getElementById('startScreen');
     // function onStartScreenTap(e) {
@@ -786,11 +785,13 @@
     //   }
     // });
     // pauseScreen.addEventListener('click', () => {
+    //   console.log("Pause overlay tapped!");
     //   paused = false;
     //   pauseScreen.style.display = "none";
     // });
     // pauseScreen.addEventListener('touchstart', (e) => {
     //   e.preventDefault();
+    //   console.log("Pause overlay touched!");
     //   paused = false;
     //   pauseScreen.style.display = "none";
     // }, { passive: false });
@@ -799,7 +800,7 @@
      * Start Game Immediately
      *****************************************/
     function startGame() {
-      console.log("Starting game with start screen overlay...");
+      console.log("Starting game with touch offset adjustment...");
       score = 0;
       lives = 3;
       shieldTime = 0;
