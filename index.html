@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport"
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Enhanced Space Shooter (No Pause)</title>
+  <title>Enhanced Space Shooter</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
     
@@ -40,6 +40,43 @@
       margin: 0 auto;
       image-rendering: crisp-edges;
     }
+    
+    /* Start Screen Overlay */
+    #startScreen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.85);
+      color: #00ff00;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Orbitron', Arial, sans-serif;
+      z-index: 200;
+      text-align: center;
+      cursor: pointer;
+    }
+    
+    /* Pause Overlay */
+    #pauseScreen {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.7);
+      color: #fff;
+      font-size: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 150;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -50,6 +87,22 @@
     COMBO: <span id="combo">0</span>
   </div>
   <canvas id="gameCanvas"></canvas>
+  
+  <!-- Start Screen Overlay -->
+  <div id="startScreen">
+    <h1>Enhanced Space Shooter</h1>
+    <p>Move your mouse or touch to steer your ship.</p>
+    <p>Click or tap to shoot and collect shield power‑ups for temporary invincibility!</p>
+    <p>Chain enemy kills to build your combo multiplier and earn extra points.</p>
+    <p>Every 1000 points, an extra ship falls—catch it to fly with two ships side by side!</p>
+    <p>When hit, you'll lose the extra ship instead of a life.</p>
+    <p>Every 1500 points, a giant meteor appears that bounces off your bullets and needs 10 hits to explode.</p>
+    <p>Press "P" to pause the game.</p>
+    <p><strong>Tap anywhere to start</strong></p>
+  </div>
+  
+  <!-- Pause Overlay -->
+  <div id="pauseScreen">Paused</div>
   
   <script>
     /*****************************************
@@ -91,6 +144,7 @@
     let lives = 3;
     let gameActive = false;
     let gameStarted = false;
+    let paused = false;
     
     // Extra ship mechanic
     let shipCount = 1;
@@ -107,7 +161,7 @@
       }
     });
     
-    // Set canvas size
+    // Set canvas size on load and resize
     function setCanvasSize() {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
@@ -238,12 +292,12 @@
      * Player Controls (Mouse & Touch)
      *****************************************/
     canvas.addEventListener('mousemove', (e) => {
-      if (!gameActive) return;
+      if (!gameActive || paused) return;
       player.x = e.clientX;
       player.y = e.clientY;
     });
     canvas.addEventListener('touchmove', (e) => {
-      if (!gameActive) return;
+      if (!gameActive || paused) return;
       const touch = e.touches[0];
       player.x = touch.clientX;
       player.y = touch.clientY;
@@ -251,7 +305,7 @@
     }, { passive: false });
     
     function shootBullet() {
-      if (!gameActive) return;
+      if (!gameActive || paused) return;
       shootSound.play();
       if (shipCount === 1) {
         bullets.push({ x: player.x, y: player.y, width: 5, height: 15, speed: 10 });
@@ -354,11 +408,11 @@
     }
     
     /*****************************************
-     * Spawning
+     * Spawning Functions
      *****************************************/
     // Regular meteor
     setInterval(() => {
-      if (!gameActive) return;
+      if (!gameActive || paused) return;
       enemies.push({
         x: Math.random() * canvas.width,
         y: 0,
@@ -372,7 +426,7 @@
     
     // Shield power-up
     function spawnPowerUp() {
-      if (gameActive && Math.random() < 0.002) {
+      if (gameActive && !paused && Math.random() < 0.002) {
         powerUps.push({
           x: Math.random() * canvas.width,
           y: 0,
@@ -427,7 +481,7 @@
      * Game Update & Draw
      *****************************************/
     function updateGame() {
-      if (!gameActive) return;
+      if (!gameActive || paused) return;
       
       updateNebula();
       updateStarLayers();
@@ -525,7 +579,7 @@
           }
         }
         
-        // Player collision
+        // Player collision detection
         if (!e.exploded) {
           let collisionHappened = false;
           if (shipCount === 1) {
@@ -582,7 +636,7 @@
         }
       });
       
-      // Extra ship power-ups
+      // Update extra ship power-ups
       if (score >= nextExtraShipScore && shipCount < 2) {
         spawnExtraShip();
         nextExtraShipScore += 1000;
@@ -605,10 +659,10 @@
         spawnLargeMeteor();
       }
       
-      // Shield timer
+      // Update shield timer
       if (shieldTime > 0) shieldTime--;
       
-      // Combo timer
+      // Update combo timer
       if (comboCount > 0) {
         comboTimer--;
         if (comboTimer <= 0) {
@@ -616,6 +670,9 @@
           comboElement.textContent = comboCount;
         }
       }
+      
+      updateParticles();
+      updateAmbientParticles();
     }
     
     function drawGame() {
@@ -624,7 +681,7 @@
       drawStarLayers();
       drawNebula();
       
-      // Shield power-ups
+      // Draw shield power-ups
       powerUps.forEach(p => {
         ctx.fillStyle = "blue";
         ctx.beginPath();
@@ -632,7 +689,7 @@
         ctx.fill();
       });
       
-      // Extra ship power-ups
+      // Draw extra ship power-ups
       extraShips.forEach(es => {
         ctx.save();
         ctx.translate(es.x, es.y);
@@ -645,7 +702,7 @@
         ctx.restore();
       });
       
-      // Player spaceship(s)
+      // Draw player spaceship(s)
       if (shipCount === 1) {
         ctx.drawImage(
           spriteSheet,
@@ -666,7 +723,7 @@
         );
       }
       
-      // Shield ring
+      // Draw shield ring
       if (shieldTime > 0) {
         shieldHue = (shieldHue + 10) % 360;
         shieldRotation += 0.1;
@@ -675,4 +732,169 @@
         ctx.beginPath();
         let gapAngle = Math.PI / 4;
         if (shipCount === 1) {
-          le
+          let radius = player.size / 1.5;
+          ctx.arc(player.x, player.y, radius, shieldRotation + gapAngle, shieldRotation + 2 * Math.PI);
+        } else {
+          let offset = player.size * 0.8;
+          let radius = offset + player.size / 2 + 5;
+          ctx.arc(player.x, player.y, radius, shieldRotation + gapAngle, shieldRotation + 2 * Math.PI);
+        }
+        ctx.stroke();
+      }
+      
+      // Draw bullets
+      bullets.forEach(b => {
+        if (b.transformed) {
+          ctx.fillStyle = "orange";
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(b.x + 3, b.y - 2, 1.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(b.x - 3, b.y + 2, 1.5, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.fillStyle = 'red';
+          ctx.fillRect(b.x - 2, b.y, b.width, b.height);
+        }
+      });
+      
+      // Draw enemies
+      enemies.forEach(e => {
+        ctx.save();
+        ctx.translate(e.x, e.y);
+        ctx.rotate(e.rotation);
+        let sprite = e.exploded ? sprites.asteroidExploding[Math.floor(e.frame / 10)] : sprites.asteroidIntact;
+        ctx.drawImage(
+          spriteSheet,
+          sprite.x, sprite.y, sprite.width, sprite.height,
+          -e.size / 2, -e.size / 2, e.size, e.size
+        );
+        ctx.restore();
+      });
+      
+      // Draw explosion and ambient particles
+      drawParticles();
+      drawAmbientParticles();
+      
+      // Draw shield bar & timer
+      if (shieldTime > 0) {
+        const totalShieldTime = 300;
+        let percent = shieldTime / totalShieldTime;
+        let barWidth = 200;
+        let barHeight = 20;
+        let x = 20;
+        let y = canvas.height - 40;
+        ctx.strokeStyle = "cyan";
+        ctx.strokeRect(x, y, barWidth, barHeight);
+        ctx.fillStyle = "rgba(0, 255, 255, 0.7)";
+        ctx.fillRect(x, y, barWidth * percent, barHeight);
+        ctx.fillStyle = "white";
+        ctx.font = "16px Orbitron";
+        ctx.fillText(Math.ceil(shieldTime / 60) + "s", x + barWidth + 10, y + barHeight - 5);
+      }
+    }
+    
+    /*****************************************
+     * Game Loop & Game Over
+     *****************************************/
+    function gameLoop() {
+      updateGame();
+      drawGame();
+      requestAnimationFrame(gameLoop);
+    }
+    
+    function gameOver() {
+      gameActive = false;
+      setTimeout(() => {
+        startGame();
+      }, 2000);
+    }
+    
+    /*****************************************
+     * Pause / Resume Functionality
+     *****************************************/
+    const pauseScreen = document.getElementById('pauseScreen');
+    
+    // Toggle pause with "P" key
+    document.addEventListener('keydown', function(e) {
+      if (e.key.toLowerCase() === 'p') {
+        paused = !paused;
+        pauseScreen.style.display = paused ? "flex" : "none";
+      }
+    });
+    
+    // Tap or touch the pause overlay to resume (for mobile)
+    pauseScreen.addEventListener('click', () => {
+      console.log("Pause overlay tapped!");
+      paused = false;
+      pauseScreen.style.display = "none";
+    });
+    pauseScreen.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      console.log("Pause overlay touched!");
+      paused = false;
+      pauseScreen.style.display = "none";
+    }, { passive: false });
+    
+    /*****************************************
+     * Start Screen Overlay
+     *****************************************/
+    // The start screen overlay is displayed on load.
+    // Tapping it will dismiss the overlay and start the game.
+    const startScreen = document.getElementById('startScreen');
+    function onStartScreenTap(e) {
+      console.log("Start screen tapped!");
+      startScreen.style.display = "none";
+      startGame();
+    }
+    startScreen.addEventListener('click', onStartScreenTap, { passive: false });
+    startScreen.addEventListener('touchstart', onStartScreenTap, { passive: false });
+    
+    /*****************************************
+     * Start Game
+     *****************************************/
+    function startGame() {
+      console.log("Starting game with start screen overlay...");
+      score = 0;
+      lives = 3;
+      shieldTime = 0;
+      comboCount = 0;
+      comboTimer = 0;
+      shipCount = 1;
+      nextExtraShipScore = 1000;
+      nextLargeMeteorScore = 1500;
+      scoreElement.textContent = score;
+      livesElement.textContent = lives;
+      comboElement.textContent = comboCount;
+      enemies.length = 0;
+      bullets.length = 0;
+      particles.length = 0;
+      ambientParticles.length = 0;
+      powerUps.length = 0;
+      extraShips.length = 0;
+      gameActive = true;
+      paused = false;
+      pauseScreen.style.display = "none";
+      player.x = canvas.width / 2;
+      player.y = canvas.height - 150 * scaleFactor;
+      if (!gameStarted) {
+        gameStarted = true;
+        gameLoop();
+      }
+    }
+    
+    // Automatically show the start screen (game waits for tap)
+    window.addEventListener('load', () => {
+      console.log("Window loaded, displaying start screen.");
+      // The start screen overlay is already visible by default.
+    });
+    
+    spriteSheet.onload = () => {
+      console.log("Assets loaded, game is ready.");
+    };
+  </script>
+</body>
+</html>
