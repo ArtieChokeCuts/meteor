@@ -6,14 +6,14 @@
   <title>Enhanced Space Shooter</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
-
+    
     body { 
       margin: 0; 
       overflow: hidden; 
       background: #000;
       font-family: 'Orbitron', Arial, sans-serif;
     }
-
+    
     #scoreBoard {
       position: fixed;
       top: 20px;
@@ -28,18 +28,18 @@
       box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
       z-index: 100;
     }
-
+    
     #scoreBoard span {
       color: #ff0066;
       text-shadow: 0 0 10px #ff0066;
     }
-
+    
     canvas { 
       display: block; 
       margin: 0 auto;
       image-rendering: crisp-edges;
     }
-
+    
     /* Start Screen Overlay */
     #startScreen {
       position: fixed;
@@ -58,7 +58,7 @@
       text-align: center;
       cursor: pointer;
     }
-
+    
     /* Pause Overlay */
     #pauseScreen {
       display: none;
@@ -82,23 +82,23 @@
     SCORE: <span id="score">0</span> | HI-SCORE: <span id="highScore">0</span> | LIVES: <span id="lives">3</span> | COMBO: <span id="combo">0</span>
   </div>
   <canvas id="gameCanvas"></canvas>
-
+  
   <!-- Start Screen -->
   <div id="startScreen">
     <h1>Enhanced Space Shooter</h1>
-    <p>Move your mouse to steer your ship.</p>
-    <p>Click to shoot and collect shield power‑ups for temporary invincibility!</p>
+    <p>Move your mouse or touch to steer your ship.</p>
+    <p>Click or tap to shoot and collect shield power‑ups for temporary invincibility!</p>
     <p>Chain enemy kills to build your combo multiplier and earn extra points.</p>
     <p>Every 1000 points, an extra ship falls—catch it to fly with two ships side by side!</p>
     <p>When hit, you'll lose the extra ship instead of a life.</p>
     <p>Every 1500 points, a giant meteor appears that bounces off your bullets and needs 10 hits to explode.</p>
     <p>Press "P" to pause the game.</p>
-    <p><strong>Click anywhere to start</strong></p>
+    <p><strong>Tap anywhere to start</strong></p>
   </div>
-
+  
   <!-- Pause Overlay -->
   <div id="pauseScreen">Paused</div>
-
+  
   <script>
     // ---- Global Variables & Utilities ----
     let shieldHue = 0;
@@ -106,7 +106,7 @@
     let comboCount = 0;
     let comboTimer = 0;
     const comboResetFrames = 180; // ~3 seconds at 60fps
-
+    
     function getRandomColor() {
       const letters = '0123456789ABCDEF';
       let color = '#';
@@ -115,14 +115,14 @@
       }
       return color;
     }
-
+    
     // ---- Sound Loading ----
     const shootSound = new Audio('shoot.mp3');
     const explosionSound = new Audio('explosion.mp3');
     const backgroundMusic = new Audio('background.mp3');
     backgroundMusic.loop = true;
     backgroundMusic.volume = 0.3;
-
+    
     // ---- Canvas Setup ----
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
@@ -130,7 +130,7 @@
     const highScoreElement = document.getElementById('highScore');
     const livesElement = document.getElementById('lives');
     const comboElement = document.getElementById('combo');
-
+    
     let scaleFactor = 1;
     let score = 0;
     let highScore = localStorage.getItem('highScore') || 0;
@@ -138,23 +138,23 @@
     let gameActive = false;
     let gameStarted = false;
     let paused = false;
-
+    
     // Extra ship mechanic: shipCount is 1 by default, becomes 2 when extra ship power‑up is collected
     let shipCount = 1;
     let nextExtraShipScore = 1000;
     // Large meteor spawning threshold
     let nextLargeMeteorScore = 1500;
-
+    
     highScoreElement.textContent = highScore;
     livesElement.textContent = lives;
-
+    
     // Start background music on user interaction
     document.addEventListener('click', () => {
       if (backgroundMusic.paused) {
         backgroundMusic.play().catch(error => console.log("Audio playback requires user interaction"));
       }
     });
-
+    
     // Set canvas size and adjust on window resize
     function setCanvasSize() {
       canvas.width = window.innerWidth;
@@ -163,11 +163,11 @@
     }
     setCanvasSize();
     window.addEventListener('resize', setCanvasSize);
-
+    
     // ---- Asset Loading ----
     const spriteSheet = new Image();
     spriteSheet.src = 'final_corrected_game_sprite_sheet.png';
-
+    
     // Sprite definitions for spaceship and asteroid states
     const sprites = {
       spaceship: { x: 10, y: 10, width: 200, height: 200 },
@@ -177,7 +177,7 @@
         { x: 670, y: 10, width: 200, height: 200 }
       ]
     };
-
+    
     // ---- Game Objects ----
     const player = { 
       x: canvas.width / 2, 
@@ -191,22 +191,22 @@
     const enemies = [];
     const particles = [];  // Explosion particles
     const powerUps = [];   // Shield power‑up objects
-
+    
     // Extra ship falling power‑ups
     const extraShips = [];
-
+    
     // Ambient particles for a colorful mask around the spaceship
     const ambientParticles = [];
-
+    
     // Shield timer variable (frames remaining)
     let shieldTime = 0;
-
+    
     // ---- Parallax Starfield Background ----
     const starLayers = {
       foreground: [],
       background: []
     };
-
+    
     function initStarLayers(numForeground = 50, numBackground = 50) {
       for (let i = 0; i < numForeground; i++) {
         starLayers.foreground.push({
@@ -226,7 +226,7 @@
       }
     }
     initStarLayers();
-
+    
     function updateStarLayers() {
       for (let layer in starLayers) {
         for (let star of starLayers[layer]) {
@@ -238,7 +238,7 @@
         }
       }
     }
-
+    
     function drawStarLayers() {
       ctx.fillStyle = "#fff";
       for (let layer in starLayers) {
@@ -249,12 +249,12 @@
         }
       }
     }
-
+    
     // ---- Occasional Atmospheric Nebula Effect ----
     let nebulaActive = false;
     let nebulaOpacity = 0;
     let nebulaTimer = 0; // Controls nebula duration
-
+    
     function updateNebula() {
       if (!nebulaActive && Math.random() < 0.0005) {
         nebulaActive = true;
@@ -274,21 +274,29 @@
         }
       }
     }
-
+    
     function drawNebula() {
       if (nebulaActive || nebulaOpacity > 0) {
         ctx.fillStyle = `rgba(128, 0, 128, ${nebulaOpacity})`;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
     }
-
-    // ---- Player Controls ----
+    
+    // ---- Player Controls (Mouse and Touch) ----
     canvas.addEventListener('mousemove', (e) => {
       if (!gameActive) return;
       player.x = e.clientX;
       player.y = e.clientY;
     });
-
+    
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      if (!gameActive) return;
+      const touch = e.touches[0];
+      player.x = touch.clientX;
+      player.y = touch.clientY;
+    }, { passive: false });
+    
     // Modified shootBullet so that both ships fire when two are active.
     function shootBullet() {
       if (!gameActive) return;
@@ -319,12 +327,17 @@
         });
       }
     }
-
+    
     canvas.addEventListener('click', () => {
       if (!gameStarted) return;
       shootBullet();
     });
-
+    
+    canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      shootBullet();
+    }, { passive: false });
+    
     // ---- Particle Explosion (Random Colors) ----
     function createExplosion(x, y, count = 20) {
       for (let i = 0; i < count; i++) {
@@ -339,7 +352,7 @@
         });
       }
     }
-
+    
     // ---- Bullet Transformation Effect ----
     // Spawns tiny bright orange particles at (x, y)
     function createBulletParticles(x, y, count = 5) {
@@ -355,7 +368,7 @@
         });
       }
     }
-
+    
     function updateParticles() {
       for (let i = particles.length - 1; i >= 0; i--) {
         let p = particles[i];
@@ -367,7 +380,7 @@
         }
       }
     }
-
+    
     function drawParticles() {
       for (let p of particles) {
         ctx.fillStyle = p.color;
@@ -376,7 +389,7 @@
         ctx.fill();
       }
     }
-
+    
     // ---- Ambient Particles for a Colorful Mask ----
     function createAmbientParticle() {
       ambientParticles.push({
@@ -389,7 +402,7 @@
         color: getRandomColor()
       });
     }
-
+    
     function updateAmbientParticles() {
       for (let i = ambientParticles.length - 1; i >= 0; i--) {
         let p = ambientParticles[i];
@@ -401,7 +414,7 @@
         }
       }
     }
-
+    
     function drawAmbientParticles() {
       for (let p of ambientParticles) {
         ctx.fillStyle = p.color;
@@ -410,7 +423,7 @@
         ctx.fill();
       }
     }
-
+    
     // ---- Enemy Spawning (Regular Meteor) ----
     setInterval(() => {
       if (!gameActive) return;
@@ -424,7 +437,7 @@
         rotationSpeed: (Math.random() * 0.1) + 0.05
       });
     }, 1200);
-
+    
     // ---- Power-Up Spawning (Shield) ----
     function spawnPowerUp() {
       if (gameActive && Math.random() < 0.002) {
@@ -436,7 +449,7 @@
         });
       }
     }
-
+    
     // ---- Extra Ship Spawning ----
     function spawnExtraShip() {
       extraShips.push({
@@ -448,7 +461,7 @@
         speed: 2
       });
     }
-
+    
     // ---- Large Meteor Spawning ----
     function spawnLargeMeteor() {
       enemies.push({
@@ -465,7 +478,7 @@
       });
       nextLargeMeteorScore += 1500;
     }
-
+    
     // ---- Collision Detection ----
     function checkCollision(a, b) {
       const aSize = a.size || a.width;
@@ -475,20 +488,20 @@
              a.y < b.y + bSize &&
              a.y + aSize > b.y;
     }
-
+    
     // ---- Game Update and Draw ----
     function updateGame() {
       if (!gameActive) return;
       if (paused) return;
-
+      
       updateNebula();
       updateStarLayers();
-
+      
       // Spawn ambient particles
       if (gameActive && Math.random() < 0.3) {
         createAmbientParticle();
       }
-
+      
       // Update bullets (including transformation timer for transformed bullets)
       bullets.forEach((b, i) => {
         if (b.transformed) {
@@ -503,7 +516,7 @@
           bullets.splice(i, 1);
         }
       });
-
+      
       // Update enemies and check collisions
       enemies.forEach((e, i) => {
         if (!e.exploded) {
@@ -515,7 +528,7 @@
             e.vx *= 0.95;
           }
         }
-
+      
         // Check bullet collisions
         bullets.forEach((b, j) => {
           if (checkCollision(b, e) && !e.exploded) {
@@ -576,7 +589,7 @@
             }
           }
         });
-
+      
         // Explosion animation for enemy
         if (e.exploded) {
           e.frame++;
@@ -584,7 +597,7 @@
             enemies.splice(i, 1);
           }
         }
-
+      
         // Player collision detection:
         if (!e.exploded) {
           let collisionHappened = false;
@@ -627,7 +640,7 @@
           }
         }
       });
-
+      
       // Update shield power‑ups
       spawnPowerUp();
       powerUps.forEach((p, i) => {
@@ -640,7 +653,7 @@
           powerUps.splice(i, 1);
         }
       });
-
+      
       // Update extra ship falling power‑ups
       if (gameActive && score >= nextExtraShipScore && shipCount < 2) {
         spawnExtraShip();
@@ -657,27 +670,11 @@
           extraShips.splice(i, 1);
         }
       });
-
+      
       // Spawn large meteors every 1500 points
       if (gameActive && score >= nextLargeMeteorScore) {
         spawnLargeMeteor();
       }
-
+      
       // Update shield timer
-      if (shieldTime > 0) shieldTime--;
-
-      // Update combo timer and reset combo if time runs out
-      if (comboCount > 0) {
-        comboTimer--;
-        if (comboTimer <= 0) {
-          comboCount = 0;
-          comboElement.textContent = comboCount;
-        }
-      }
-
-      updateParticles();
-      updateAmbientParticles();
-    }
-
-    function drawGame() {
-      ctx.clearRect(0
+   
