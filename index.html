@@ -245,8 +245,8 @@
     // Increase upward offset for touch events (set to 100 pixels here)
     canvas.addEventListener('touchmove', (e) => {
       if (!gameActive) return;
-      const touch = e.touches[100];
-      const touchOffset = 200; // Increase this value if needed
+      const touch = e.touches[0];
+      const touchOffset = 100; // Increase this value if needed
       player.x = touch.clientX;
       player.y = touch.clientY - touchOffset;
       e.preventDefault(); // Prevent scrolling
