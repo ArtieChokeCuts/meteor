@@ -1,0 +1,121 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #000;
+  font-family: 'Orbitron', Arial, sans-serif;
+  color: #eee; /* Default text color */
+}
+
+#scoreBoard {
+  position: fixed;
+  top: 15px;
+  left: 15px;
+  color: #00ff00;
+  font-size: clamp(16px, 3vw, 24px); /* Responsive font size */
+  text-shadow: 0 0 8px #00ff00;
+  background: rgba(0, 0, 0, 0.75);
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: 1px solid #00ff00;
+  box-shadow: 0 0 15px rgba(0, 255, 0, 0.3);
+  z-index: 100;
+  display: flex; /* Use flexbox for alignment */
+  gap: 15px; /* Space between items */
+  flex-wrap: wrap; /* Allow wrapping on small screens */
+}
+
+#scoreBoard span {
+  color: #ff0066; /* Score/Lives/Combo color */
+  text-shadow: 0 0 8px #ff0066;
+  font-weight: bold;
+}
+
+canvas {
+  display: block;
+  margin: 0 auto;
+  /* image-rendering: crisp-edges; Removed as it might not be ideal for rotated sprites */
+}
+
+/* Start Screen Overlay */
+#startScreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.9);
+  color: #00ff00;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Orbitron', Arial, sans-serif;
+  z-index: 200;
+  text-align: center;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+#startScreen h1 {
+    font-size: clamp(28px, 6vw, 48px);
+    margin-bottom: 20px;
+    color: #fff;
+    text-shadow: 0 0 10px #00ff00, 0 0 20px #00ff00;
+}
+
+#startScreen p {
+    font-size: clamp(14px, 2.5vw, 18px);
+    line-height: 1.6;
+    margin: 8px 0;
+    max-width: 600px;
+}
+
+#startScreen strong {
+    display: block;
+    margin-top: 25px;
+    font-size: clamp(16px, 3vw, 22px);
+    color: #fff;
+    animation: pulse 1.5s infinite;
+}
+
+/* Text highlighting */
+#startScreen .shield-text { color: #00aaff; font-weight: bold; text-shadow: 0 0 5px #00aaff;}
+#startScreen .combo-text { color: #ff0066; font-weight: bold; text-shadow: 0 0 5px #ff0066;}
+#startScreen .extra-ship-text { color: #ffff00; font-weight: bold; text-shadow: 0 0 5px #ffff00;}
+#startScreen .meteor-text { color: #ff8800; font-weight: bold; text-shadow: 0 0 5px #ff8800;}
+
+
+#startMessage {
+    cursor: default; /* Default cursor during loading */
+}
+
+#startMessage.ready {
+    cursor: pointer; /* Pointer cursor when ready */
+}
+
+@keyframes pulse {
+  0% { opacity: 0.7; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.05); }
+  100% { opacity: 0.7; transform: scale(1); }
+}
+
+
+/* Pause Overlay */
+#pauseScreen {
+  display: none; /* Initially hidden */
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: clamp(30px, 8vw, 60px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 150;
+  text-shadow: 0 0 10px #000;
+}
