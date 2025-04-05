@@ -1,29 +1,33 @@
 (function() {
   'use strict';
 
-  console.log("Combined Game script loaded - With Multi-Ship Powerup & Enemy Health Bars.");
+  console.log("Combined Game script loaded - Wider Lasers, Wingman Powerups, Ship Limits, Health Bars.");
 
   // ---- Configuration ----
   const config = {
     player: {
       size: 50,
-      shootCooldown: 10, // Frames between shots
-      laserDuration: 300, // Frames laser power-up lasts
-      shipFormationOffsetX: 55, // Horizontal distance for wingmen
-      shipFormationOffsetY: 35, // Vertical distance (behind player) for wingmen
+      shootCooldown: 10,
+      laserDuration: 300,
+      shipFormationOffsetX: 55,
+      shipFormationOffsetY: 35,
+    },
+    // NEW: Laser specific config
+    laser: {
+      widthBonus: 8, // Added pixels to laser collision check radius
     },
     bullets: {
       width: 5,
       height: 15,
       speed: 10,
       color: 'red',
-      transformedColor: 'orange', // Color after bouncing off large meteor
-      bounceLife: 20, // Frames bounced bullet lasts
+      transformedColor: 'orange',
+      bounceLife: 20,
     },
     enemies: {
-      spawnRateInitial: 1200, // Milliseconds
-      spawnRateScoreFactor: 50, // Spawn rate decreases every X points
-      minSpawnRate: 350, // Fastest spawn rate
+      spawnRateInitial: 1200,
+      spawnRateScoreFactor: 50,
+      minSpawnRate: 350,
       size: 50,
       speed: 3,
       points: 10,
@@ -33,13 +37,13 @@
     largeMeteor: {
       sizeMultiplier: 2.5,
       health: 10,
-      pointsPerHit: 10, // Points for hitting, not destroying
-      spawnScoreInterval: 1500, // Spawn one every X score points
-      bounceForce: 1.5, // How much bullets push it horizontally
+      pointsPerHit: 10,
+      spawnScoreInterval: 1500,
+      bounceForce: 1.5,
       explosionParticles: 50,
     },
     enemyShipChance: 0.25,
-    enemyShipHealth: 3, // Max health for enemy ships
+    enemyShipHealth: 3,
     enemyShipSpeed: 2,
     enemyShipPoints: 50,
     enemyShipShootTimerMin: 80,
@@ -49,14 +53,14 @@
     particles: {
       count: 25,
       speed: 4,
-      life: 60, // Frames
+      life: 60,
       radiusMin: 1,
       radiusMax: 3,
     },
     ambientParticles: {
       spawnChance: 0.3,
       speed: 1,
-      life: 100, // Frames
+      life: 100,
       radiusMin: 0.5,
       radiusMax: 2.0,
     },
@@ -64,13 +68,13 @@
       shieldSpawnChance: 0.003,
       laserSpawnChance: 0.002,
       droneSpawnChance: 0.0015,
-      shieldDuration: 300, // Frames (5 seconds)
-      droneDuration: 600, // Frames (10 seconds)
-      powerUpSize: 30, // General size for S, L, D
+      shieldDuration: 300,
+      droneDuration: 600,
+      powerUpSize: 30,
       powerUpSpeed: 2,
-      droneShootCooldown: 45, // Frames between drone shots
-      extraShipScoreInterval: 10000, // Score needed for powerup to appear
-      extraShipPowerUpSize: 40,      // Visual size of the falling ship powerup
+      droneShootCooldown: 45,
+      extraShipScoreInterval: 10000,
+      extraShipPowerUpSize: 40,
       extraShipPowerUpSpeed: 2.5,
       extraShipPowerUpRotationSpeedMin: 0.03,
       extraShipPowerUpRotationSpeedMax: 0.08,
@@ -88,18 +92,18 @@
       fadeInSpeed: 0.005,
       fadeOutSpeed: 0.005,
       maxOpacity: 0.5,
-      duration: 300, // Frames
+      duration: 300,
     },
     combo: {
-      resetFrames: 180, // Frames (3 seconds) without hit to reset combo
+      resetFrames: 180,
     },
     initialLives: 3,
     levelRequirements: {
        1: { ship2: 1, ship3: 0 }, 2: { ship2: 0, ship3: 1 }, 3: { ship2: 1, ship3: 1 },
        4: { ship2: 2, ship3: 1 }, 5: { ship2: 1, ship3: 2 }, 6: { ship2: 2, ship3: 2 },
     },
-    levelTransitionDuration: 180, // Frames (3 seconds) for level title screen
-    sfxVolume: 0.5, // General volume for sound effects (0.0 to 1.0)
+    levelTransitionDuration: 180,
+    sfxVolume: 0.5,
   };
 
   // ---- Asset Definitions ----
@@ -110,7 +114,7 @@
     explosionSound: { src: 'explosion.mp3', audio: null, volume: config.sfxVolume },
     laserSound: { src: 'laser.mp3', audio: null, volume: config.sfxVolume },
     droneSound: { src: 'drone.mp3', audio: null, volume: config.sfxVolume },
-    powerUpGetSound: { src: 'explosion.mp3', audio: null, volume: config.sfxVolume * 1.2 }, // Reuses explosion
+    powerUpGetSound: { src: 'explosion.mp3', audio: null, volume: config.sfxVolume * 1.2 },
     backgroundMusic: { src: 'background.mp3', audio: null, loop: true, volume: 0.4 },
   };
 
@@ -194,7 +198,20 @@
   function drawNebula() { if (nebulaOpacity > 0) { ctx.fillStyle = `rgba(100, 0, 128, ${nebulaOpacity})`; ctx.fillRect(0, 0, canvas.width, canvas.height); } }
 
   // ---- Player & Bullets ----
-  function handleShooting() { if (frameCount < lastShotFrame + config.player.shootCooldown) return; lastShotFrame = frameCount; if (player.hasLaser) { fireLaser(); } else { shootBullet(); } }
+  function handleShooting() {
+    if (frameCount < lastShotFrame + config.player.shootCooldown) return;
+    lastShotFrame = frameCount;
+
+    if (player.hasLaser) {
+        assetManager.playSound('laserSound'); // Play sound once per trigger
+        const offsetY = player.size / 2;
+        fireLaserFromPosition(player.x, player.y - offsetY); // Center
+        if (playerShipCount >= 2) { const wingmanX = player.x - config.player.shipFormationOffsetX; const wingmanY = player.y + config.player.shipFormationOffsetY; fireLaserFromPosition(wingmanX, wingmanY - offsetY); } // Left
+        if (playerShipCount >= 3) { const wingmanX = player.x + config.player.shipFormationOffsetX; const wingmanY = player.y + config.player.shipFormationOffsetY; fireLaserFromPosition(wingmanX, wingmanY - offsetY); } // Right
+    } else {
+      shootBullet(); // Fires bullets from all ships
+    }
+  }
   function shootBullet() {
     assetManager.playSound('shootSound');
     const bulletCommon = { width: config.bullets.width, height: config.bullets.height, speed: config.bullets.speed, transformed: false, transformationTimer: 0, hasBounced: false };
@@ -207,9 +224,28 @@
   function drawBullets() { bullets.forEach(b => { if (b.transformed) { ctx.fillStyle = config.bullets.transformedColor; ctx.beginPath(); ctx.arc(b.x, b.y, 3, 0, Math.PI * 2); ctx.fill(); } else { ctx.fillStyle = config.bullets.color; ctx.fillRect(b.x - b.width / 2, b.y - b.height / 2, b.width, b.height); } }); }
 
   // ---- Laser Weapon ----
-  function fireLaser() { assetManager.playSound('laserSound'); const startX = player.x; const startY = player.y - player.size / 2; const endY = 0; const segments = []; const segmentCount = 10; for (let i = 0; i <= segmentCount; i++) { let t = i / segmentCount; segments.push({ x: startX + (Math.random() - 0.5) * 15, y: startY + (endY - startY) * t }); } activeLaserEffects.push({ pathPoints: segments, lifetime: 5, initialAlpha: 1.0, initialWidth: 5 }); checkLaserCollisions(segments); }
+  function fireLaserFromPosition(startX, startY) {
+    const endY = 0; const segments = []; const segmentCount = 10;
+    for (let i = 0; i <= segmentCount; i++) { let t = i / segmentCount; segments.push({ x: startX + (Math.random() - 0.5) * 15, y: startY + (endY - startY) * t }); }
+    activeLaserEffects.push({ pathPoints: segments, lifetime: 5, initialAlpha: 1.0, initialWidth: 5 });
+    checkLaserCollisions(segments); // Collision check still happens once per frame effectively, even if called multiple times
+  }
   function fireDroneLaser() { assetManager.playSound('droneSound'); const startX = dronePos.x; const startY = dronePos.y; const endY = 0; const segments = []; const segmentCount = 8; for (let i = 0; i <= segmentCount; i++) { let t = i / segmentCount; segments.push({ x: startX + (Math.random() - 0.5) * 10, y: startY + (endY - startY) * t }); } activeLaserEffects.push({ pathPoints: segments, lifetime: 5, initialAlpha: 0.8, initialWidth: 4 }); checkLaserCollisions(segments); }
-  function checkLaserCollisions(pathPoints) { pathPoints.forEach(point => { for (let i = enemies.length - 1; i >= 0; i--) { const enemy = enemies[i]; if (enemy.exploded) continue; const dx = enemy.x - point.x; const dy = enemy.y - point.y; if (Math.sqrt(dx * dx + dy * dy) < enemy.size / 2) { handleLaserEnemyCollision(enemy, i); } } }); updateScoreboard(); }
+  function checkLaserCollisions(pathPoints) {
+    pathPoints.forEach(point => {
+      for (let i = enemies.length - 1; i >= 0; i--) {
+          const enemy = enemies[i];
+          if (enemy.exploded) continue;
+          const dx = enemy.x - point.x; const dy = enemy.y - point.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          // Use laserWidthBonus from config
+          if (distance < enemy.size / 2 + config.laser.widthBonus) {
+              handleLaserEnemyCollision(enemy, i);
+          }
+      }
+    });
+    updateScoreboard();
+  }
   function handleLaserEnemyCollision(enemy, enemyIndex) { const damage = 0.8; if (enemy.type === "large") { enemy.health -= damage / 2; score += config.largeMeteor.pointsPerHit * 0.5; triggerCombo(); if (enemy.health <= 0 && !enemy.exploded) { assetManager.playSound('explosionSound'); enemy.exploded = true; enemy.frame = 0; createExplosion(enemy.x, enemy.y, config.largeMeteor.explosionParticles); score += 50; } else if (!enemy.exploded) { createExplosion(enemy.x + getRandom(-5, 5), enemy.y + getRandom(-5, 5), 1, 1, 10); } } else if (enemy.type === "ship") { enemy.health -= damage; score += config.enemies.points * 0.5; triggerCombo(); if (enemy.health <= 0 && !enemy.exploded) { assetManager.playSound('explosionSound'); enemy.exploded = true; enemy.frame = 0; createExplosion(enemy.x, enemy.y); score += config.enemyShipPoints; if (enemy.spriteType === 2) enemyShipsDestroyedThisLevel.ship2++; else if (enemy.spriteType === 3) enemyShipsDestroyedThisLevel.ship3++; checkLevelCompletion(); } else if (!enemy.exploded) { createExplosion(enemy.x + getRandom(-5, 5), enemy.y + getRandom(-5, 5), 1, 1, 10); } } else if (enemy.type === "regular" && !enemy.exploded) { assetManager.playSound('explosionSound'); enemy.exploded = true; enemy.frame = 0; createExplosion(enemy.x, enemy.y); score += config.enemies.points * comboCount; triggerCombo(); } }
   function drawLaserEffects() { for (let i = activeLaserEffects.length - 1; i >= 0; i--) { let effect = activeLaserEffects[i]; const currentAlpha = effect.initialAlpha * (effect.lifetime / 5); const currentWidth = effect.initialWidth * (effect.lifetime / 5); if (currentAlpha <= 0 || effect.lifetime <= 0) { activeLaserEffects.splice(i, 1); continue; } ctx.save(); ctx.beginPath(); ctx.moveTo(effect.pathPoints[0].x, effect.pathPoints[0].y); for (let j = 1; j < effect.pathPoints.length; j++) { ctx.lineTo(effect.pathPoints[j].x, effect.pathPoints[j].y); } ctx.strokeStyle = 'lime'; ctx.lineWidth = currentWidth; ctx.globalAlpha = currentAlpha; ctx.shadowColor = 'white'; ctx.shadowBlur = 10; ctx.stroke(); ctx.restore(); effect.lifetime--; } }
 
@@ -228,7 +264,7 @@
 
   // ---- Enemies (All Types) ----
   function scheduleEnemySpawn(delay) { if (!gameActive || showingLevelTransition) return; if (enemySpawnTimerId) clearTimeout(enemySpawnTimerId); const currentDelay = delay !== undefined ? delay : currentEnemySpawnRate; enemySpawnTimerId = setTimeout(() => { if (gameActive && !paused && !showingLevelTransition) { spawnEnemy(); const scoreFactorReduction = Math.floor(score / config.enemies.spawnRateScoreFactor); currentEnemySpawnRate = Math.max(config.enemies.minSpawnRate, config.enemies.spawnRateInitial - scoreFactorReduction * 10); scheduleEnemySpawn(); } }, currentDelay); }
-  function spawnEnemy() { const isShip = Math.random() < config.enemyShipChance; if (isShip) { spawnEnemyShip(); } else { spawnRegularMeteor(); } }
+  function spawnEnemy() { const roll = Math.random(); const isShipAttempt = roll < config.enemyShipChance; if (isShipAttempt) { const maxShipsAllowed = Math.min(level, 17); let currentActiveShips = 0; for (const enemy of enemies) { if (enemy.type === 'ship' && !enemy.exploded) { currentActiveShips++; } } if (currentActiveShips < maxShipsAllowed) { spawnEnemyShip(); } else { spawnRegularMeteor(); } } else { spawnRegularMeteor(); } }
   function spawnRegularMeteor() { const size = config.enemies.size; enemies.push({ x: Math.random() * (canvas.width - size) + size / 2, y: -size / 2, size: size, speed: config.enemies.speed * getRandom(0.9, 1.2), frame: 0, exploded: false, type: 'regular', health: 1, rotation: 0, rotationSpeed: (Math.random() > 0.5 ? 1 : -1) * getRandom(config.enemies.rotationSpeedMin, config.enemies.rotationSpeedMax), vx: 0, }); }
   function spawnLargeMeteor() { const size = config.enemies.size * config.largeMeteor.sizeMultiplier; enemies.push({ x: Math.random() * (canvas.width - size) + size / 2, y: -size / 2, size: size, speed: config.enemies.speed * 0.7, frame: 0, exploded: false, type: 'large', health: config.largeMeteor.health, rotation: 0, rotationSpeed: (Math.random() > 0.5 ? 1 : -1) * getRandom(config.enemies.rotationSpeedMin * 0.5, config.enemies.rotationSpeedMax * 0.5), vx: 0, }); nextLargeMeteorScore += config.largeMeteor.spawnScoreInterval; console.log("Large Meteor Spawned!"); }
   function spawnEnemyShip() { const size = config.player.size; const spriteType = Math.random() < 0.5 ? 2 : 3; enemies.push({ x: Math.random() * (canvas.width - size) + size / 2, y: -size / 2, size: size, speed: config.enemyShipSpeed, frame: 0, exploded: false, type: 'ship', health: config.enemyShipHealth, rotation: 0, rotationSpeed: 0, vx: (Math.random() < 0.5 ? 1 : -1) * config.enemyShipSpeed * 0.5, spriteType: spriteType, shootTimer: Math.floor(getRandom(config.enemyShipShootTimerMin, config.enemyShipShootTimerMax)), }); }
@@ -261,36 +297,11 @@
     if (gameActive && !paused && !showingLevelTransition && playerShipCount < 3 && score >= nextExtraShipScore) { spawnExtraShipPowerUp(); }
     if (gameActive && !paused && !showingLevelTransition && score >= nextLargeMeteorScore) { spawnLargeMeteor(); }
   }
-  // UPDATED drawPowerUps function
   function drawPowerUps() {
-    // Draw S, L, D powerups
-    powerUps.forEach(pu => {
-        let color, text;
-        switch (pu.type) {
-            case 'shield': color = "rgba(0, 150, 255, 0.9)"; text = "S"; break;
-            case 'laser': color = "rgba(0, 255, 0, 0.9)"; text = "L"; break;
-            case 'drone': color = "rgba(255, 255, 0, 0.9)"; text = "D"; break;
-            default: color = "grey"; text = "?"; break;
-        }
-        ctx.fillStyle = color; ctx.beginPath(); ctx.arc(pu.x, pu.y, pu.size / 2, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
-        ctx.fillStyle = "#000"; ctx.font = `bold ${pu.size * 0.6}px Orbitron`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(text, pu.x, pu.y);
-    });
-
-    // Draw falling extra ship powerups
-    const shipSprite = sprites.spaceship;
-    const sheet = assetManager.getSpriteSheet();
-    if (!sheet || !shipSprite) { console.warn("Spritesheet or ship sprite not ready, cannot draw extra ship powerups."); return; } // Asset check
-
-    extraShipPowerUps.forEach(espu => {
-        ctx.save(); ctx.translate(espu.x, espu.y); ctx.rotate(espu.rotation);
-        // Draw sprite
-        ctx.drawImage( sheet, shipSprite.x, shipSprite.y, shipSprite.width, shipSprite.height, -espu.size / 2, -espu.size / 2, espu.size, espu.size );
-        // Draw glow
-        ctx.fillStyle = "rgba(255, 255, 100, 0.25)"; ctx.beginPath(); ctx.arc(0, 0, espu.size * 0.65, 0, Math.PI * 2); ctx.fill();
-        ctx.restore();
-    });
+    powerUps.forEach(pu => { let color, text; switch (pu.type) { case 'shield': color = "rgba(0, 150, 255, 0.9)"; text = "S"; break; case 'laser': color = "rgba(0, 255, 0, 0.9)"; text = "L"; break; case 'drone': color = "rgba(255, 255, 0, 0.9)"; text = "D"; break; default: color = "grey"; text = "?"; break; } ctx.fillStyle = color; ctx.beginPath(); ctx.arc(pu.x, pu.y, pu.size / 2, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke(); ctx.fillStyle = "#000"; ctx.font = `bold ${pu.size * 0.6}px Orbitron`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(text, pu.x, pu.y); });
+    const shipSprite = sprites.spaceship; const sheet = assetManager.getSpriteSheet(); if (!sheet || !shipSprite) { console.warn("Spritesheet or ship sprite not ready, cannot draw extra ship powerups."); return; }
+    extraShipPowerUps.forEach(espu => { ctx.save(); ctx.translate(espu.x, espu.y); ctx.rotate(espu.rotation); ctx.drawImage( sheet, shipSprite.x, shipSprite.y, shipSprite.width, shipSprite.height, -espu.size / 2, -espu.size / 2, espu.size, espu.size ); ctx.fillStyle = "rgba(255, 255, 100, 0.25)"; ctx.beginPath(); ctx.arc(0, 0, espu.size * 0.65, 0, Math.PI * 2); ctx.fill(); ctx.restore(); });
   }
-
 
   // ---- Drone Behavior ----
   function updateDrone() { if (!droneActive) return; droneOrbitAngle += 0.05; dronePos.x = player.x + Math.cos(droneOrbitAngle) * droneOrbitRadius; dronePos.y = player.y + Math.sin(droneOrbitAngle) * droneOrbitRadius; droneShootTimer--; if (droneShootTimer <= 0) { fireDroneLaser(); droneShootTimer = config.powerUps.droneShootCooldown; } droneTimer--; if (droneTimer <= 0) { droneActive = false; console.log("Drone deactivated."); } }
@@ -298,7 +309,21 @@
 
   // ---- Player Drawing & Effects ----
   function drawPlayer() { const shipSprite = sprites.spaceship; const sheet = assetManager.getSpriteSheet(); if (!shipSprite || !sheet) return; const drawShip = (x, y) => { ctx.drawImage(sheet, shipSprite.x, shipSprite.y, shipSprite.width, shipSprite.height, x - player.size / 2, y - player.size / 2, player.size, player.size); }; drawShip(player.x, player.y); const offsetX = config.player.shipFormationOffsetX; const offsetY = config.player.shipFormationOffsetY; if (playerShipCount >= 2) { drawShip(player.x - offsetX, player.y + offsetY); } if (playerShipCount >= 3) { drawShip(player.x + offsetX, player.y + offsetY); } }
-  function drawShield() { if (shieldTime <= 0) return; shieldHue = (shieldHue + 5) % 360; shieldRotation += 0.05; const shieldLineWidth = 4; const shieldColor = `hsl(${shieldHue}, 100%, 60%)`; const radius = player.size * 0.7; const gapAngle = Math.PI / 6; const startAngle = shieldRotation + gapAngle; const endAngle = shieldRotation + Math.PI * 2; ctx.strokeStyle = shieldColor; ctx.lineWidth = shieldLineWidth; ctx.shadowColor = shieldColor; ctx.shadowBlur = 10; ctx.beginPath(); ctx.arc(player.x, player.y, radius, startAngle, endAngle); ctx.stroke(); ctx.shadowBlur = 0; const barMaxWidth = 150, barHeight = 15; const barX = 20, barY = canvas.height - barHeight - 15; const shieldPercent = shieldTime / config.powerUps.shieldDuration; const currentBarWidth = barMaxWidth * shieldPercent; ctx.fillStyle = "rgba(0, 0, 0, 0.5)"; ctx.fillRect(barX, barY, barMaxWidth, barHeight); ctx.fillStyle = shieldColor; ctx.fillRect(barX, barY, currentBarWidth, barHeight); ctx.strokeStyle = "rgba(255, 255, 255, 0.8)"; ctx.lineWidth = 1; ctx.strokeRect(barX, barY, barMaxWidth, barHeight); ctx.fillStyle = "#fff"; ctx.font = "14px Orbitron"; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText(Math.ceil(shieldTime / 60) + "s", barX + barMaxWidth + 10, barY + barHeight / 2); }
+  function drawShield() {
+    if (shieldTime <= 0) return;
+    shieldHue = (shieldHue + 5) % 360; shieldRotation += 0.05;
+    const shieldLineWidth = 4; const shieldColor = `hsl(${shieldHue}, 100%, 60%)`;
+    const radius = player.size * 0.7; const gapAngle = Math.PI / 6;
+    const startAngle = shieldRotation + gapAngle; const endAngle = shieldRotation + Math.PI * 2;
+    const drawArc = (centerX, centerY) => { ctx.beginPath(); ctx.arc(centerX, centerY, radius, startAngle, endAngle); ctx.stroke(); };
+    ctx.strokeStyle = shieldColor; ctx.lineWidth = shieldLineWidth; ctx.shadowColor = shieldColor; ctx.shadowBlur = 10;
+    drawArc(player.x, player.y); // Center
+    const offsetX = config.player.shipFormationOffsetX; const offsetY = config.player.shipFormationOffsetY;
+    if (playerShipCount >= 2) { drawArc(player.x - offsetX, player.y + offsetY); } // Left
+    if (playerShipCount >= 3) { drawArc(player.x + offsetX, player.y + offsetY); } // Right
+    ctx.shadowBlur = 0;
+    const barMaxWidth = 150, barHeight = 15; const barX = 20, barY = canvas.height - barHeight - 15; const shieldPercent = shieldTime / config.powerUps.shieldDuration; const currentBarWidth = barMaxWidth * shieldPercent; ctx.fillStyle = "rgba(0, 0, 0, 0.5)"; ctx.fillRect(barX, barY, barMaxWidth, barHeight); ctx.fillStyle = shieldColor; ctx.fillRect(barX, barY, currentBarWidth, barHeight); ctx.strokeStyle = "rgba(255, 255, 255, 0.8)"; ctx.lineWidth = 1; ctx.strokeRect(barX, barY, barMaxWidth, barHeight); ctx.fillStyle = "#fff"; ctx.font = "14px Orbitron"; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText(Math.ceil(shieldTime / 60) + "s", barX + barMaxWidth + 10, barY + barHeight / 2);
+  }
 
   // ---- Scoring, Combo, High Score ----
   function triggerCombo() { if (comboCount === 0) comboCount = 1; comboCount++; comboTimer = config.combo.resetFrames; updateScoreboard(); }
@@ -307,7 +332,7 @@
   function checkHighScore() { if (score > highScore) { highScore = score; localStorage.setItem('highScore', highScore); updateScoreboard(); } }
 
   // ---- Level & Advancement ----
-   function checkLevelCompletion() { const req = config.levelRequirements[level]; if (!req) return; if (enemyShipsDestroyedThisLevel.ship2 >= req.ship2 && enemyShipsDestroyedThisLevel.ship3 >= req.ship3) { if (!showingLevelTransition) { triggerLevelTransition(); } } }
+   function checkLevelCompletion() { const req = config.levelRequirements[level]; if (!req && level <= 17) { /* Stick to reqs */ return; } if (!req) return; if (enemyShipsDestroyedThisLevel.ship2 >= req.ship2 && enemyShipsDestroyedThisLevel.ship3 >= req.ship3) { if (!showingLevelTransition) { triggerLevelTransition(); } } }
    function triggerLevelTransition() { console.log(`Level ${level} complete! Starting transition...`); showingLevelTransition = true; levelTransitionTimer = config.levelTransitionDuration; if (enemySpawnTimerId) clearTimeout(enemySpawnTimerId); clearEnemiesOfType('ship'); score += level * 100; updateScoreboard(); checkHighScore(); }
    function finishLevelTransition() { showingLevelTransition = false; level++; enemyShipsDestroyedThisLevel.ship2 = 0; enemyShipsDestroyedThisLevel.ship3 = 0; currentEnemySpawnRate = Math.max(config.enemies.minSpawnRate, currentEnemySpawnRate - 50); scheduleEnemySpawn(500); console.log(`Starting Level ${level}`); }
    function clearEnemiesOfType(typeToClear) { for (let i = enemies.length - 1; i >= 0; i--) { if (enemies[i].type === typeToClear && !enemies[i].exploded) { createExplosion(enemies[i].x, enemies[i].y, 10, 2, 30); enemies.splice(i, 1); } } }
