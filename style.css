@@ -5,7 +5,7 @@ body {
   overflow: hidden;
   background: #000;
   font-family: 'Orbitron', Arial, sans-serif;
-  color: #eee;
+  color: #eee; /* Default text color */
 }
 
 #scoreBoard {
@@ -13,7 +13,7 @@ body {
   top: 15px;
   left: 15px;
   color: #00ff00;
-  font-size: clamp(16px, 3vw, 24px);
+  font-size: clamp(16px, 3vw, 24px); /* Responsive font size */
   text-shadow: 0 0 8px #00ff00;
   background: rgba(0, 0, 0, 0.75);
   padding: 10px 20px;
@@ -21,13 +21,13 @@ body {
   border: 1px solid #00ff00;
   box-shadow: 0 0 15px rgba(0, 255, 0, 0.3);
   z-index: 100;
-  display: flex;
-  gap: 15px;
-  flex-wrap: wrap;
+  display: flex; /* Use flexbox for alignment */
+  gap: 15px; /* Space between items */
+  flex-wrap: wrap; /* Allow wrapping on small screens */
 }
 
 #scoreBoard span {
-  color: #ff0066;
+  color: #ff0066; /* Score/Lives/Combo color */
   text-shadow: 0 0 8px #ff0066;
   font-weight: bold;
 }
@@ -50,43 +50,48 @@ canvas {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  font-family: 'Orbitron', Arial, sans-serif;
   z-index: 200;
   text-align: center;
   padding: 20px;
   box-sizing: border-box;
-  cursor: default;
+  cursor: default; /* Default cursor during loading */
 }
 
-#startScreen.ready { cursor: pointer; }
+#startScreen.ready {
+    cursor: pointer; /* Pointer cursor when ready */
+}
+
 
 #startScreen h1 {
-  font-size: clamp(28px, 6vw, 48px);
-  margin-bottom: 20px;
-  color: #fff;
-  text-shadow: 0 0 10px #00ff00, 0 0 20px #00ff00;
+    font-size: clamp(28px, 6vw, 48px);
+    margin-bottom: 20px;
+    color: #fff;
+    text-shadow: 0 0 10px #00ff00, 0 0 20px #00ff00;
 }
 
 #startScreen p {
-  font-size: clamp(14px, 2.5vw, 18px);
-  line-height: 1.6;
-  margin: 8px 0;
-  max-width: 600px;
+    font-size: clamp(14px, 2.5vw, 18px);
+    line-height: 1.6;
+    margin: 8px 0;
+    max-width: 600px;
 }
 
 #startScreen strong {
-  display: block;
-  margin-top: 25px;
-  font-size: clamp(16px, 3vw, 22px);
-  color: #fff;
-  animation: pulse 1.5s infinite;
+    display: block;
+    margin-top: 25px;
+    font-size: clamp(16px, 3vw, 22px);
+    color: #fff;
+    animation: pulse 1.5s infinite;
 }
 
 /* Text highlighting */
-#startScreen .shield-text { color: #00aaff; font-weight: bold; text-shadow: 0 0 5px #00aaff; }
-#startScreen .laser-text { color: #00ff00; font-weight: bold; text-shadow: 0 0 5px #00ff00; }
-#startScreen .drone-text { color: #ffff00; font-weight: bold; text-shadow: 0 0 5px #ffff00; }
-#startScreen .boss-text { color: #ff4444; font-weight: bold; text-shadow: 0 0 5px #ff4444; }
-#startScreen .meteor-text { color: #ff8800; font-weight: bold; text-shadow: 0 0 5px #ff8800; }
+#startScreen .shield-text { color: #00aaff; font-weight: bold; text-shadow: 0 0 5px #00aaff;}
+#startScreen .laser-text { color: #00ff00; font-weight: bold; text-shadow: 0 0 5px #00ff00;}
+#startScreen .drone-text { color: #ffff00; font-weight: bold; text-shadow: 0 0 5px #ffff00;}
+#startScreen .boss-text { color: #ff4444; font-weight: bold; text-shadow: 0 0 5px #ff4444;}
+#startScreen .meteor-text { color: #ff8800; font-weight: bold; text-shadow: 0 0 5px #ff8800;} /* Keep if needed */
+
 
 @keyframes pulse {
   0% { opacity: 0.7; transform: scale(1); }
@@ -94,9 +99,10 @@ canvas {
   100% { opacity: 0.7; transform: scale(1); }
 }
 
+
 /* Pause Overlay */
 #pauseScreen {
-  display: none;
+  display: none; /* Initially hidden */
   position: fixed;
   top: 0;
   left: 0;
@@ -105,6 +111,7 @@ canvas {
   background: rgba(0, 0, 0, 0.75);
   color: #fff;
   font-size: clamp(30px, 8vw, 60px);
+  /* display: flex; corrected in JS */
   align-items: center;
   justify-content: center;
   z-index: 150;
