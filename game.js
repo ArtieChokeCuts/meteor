@@ -1,33 +1,32 @@
 (function() {
   'use strict';
 
-  console.log("Combined Game script loaded - Wider Lasers, Wingman Powerups, Ship Limits, Health Bars.");
+  console.log("Combined Game script loaded - Safer HighScore, Ship Limits, Multi-Ship, Health Bars.");
 
   // ---- Configuration ----
   const config = {
     player: {
       size: 50,
-      shootCooldown: 10,
-      laserDuration: 300,
-      shipFormationOffsetX: 55,
-      shipFormationOffsetY: 35,
+      shootCooldown: 10, // Frames between shots
+      laserDuration: 300, // Frames laser power-up lasts
+      shipFormationOffsetX: 55, // Horizontal distance for wingmen
+      shipFormationOffsetY: 35, // Vertical distance (behind player) for wingmen
     },
-    // NEW: Laser specific config
     laser: {
-      widthBonus: 8, // Added pixels to laser collision check radius
+        widthBonus: 8, // Added pixels to laser collision check radius
     },
     bullets: {
       width: 5,
       height: 15,
       speed: 10,
       color: 'red',
-      transformedColor: 'orange',
-      bounceLife: 20,
+      transformedColor: 'orange', // Color after bouncing off large meteor
+      bounceLife: 20, // Frames bounced bullet lasts
     },
     enemies: {
-      spawnRateInitial: 1200,
-      spawnRateScoreFactor: 50,
-      minSpawnRate: 350,
+      spawnRateInitial: 1200, // Milliseconds
+      spawnRateScoreFactor: 50, // Spawn rate decreases every X points
+      minSpawnRate: 350, // Fastest spawn rate
       size: 50,
       speed: 3,
       points: 10,
@@ -37,13 +36,13 @@
     largeMeteor: {
       sizeMultiplier: 2.5,
       health: 10,
-      pointsPerHit: 10,
-      spawnScoreInterval: 1500,
-      bounceForce: 1.5,
+      pointsPerHit: 10, // Points for hitting, not destroying
+      spawnScoreInterval: 1500, // Spawn one every X score points
+      bounceForce: 1.5, // How much bullets push it horizontally
       explosionParticles: 50,
     },
-    enemyShipChance: 0.25,
-    enemyShipHealth: 3,
+    enemyShipChance: 0.25, // Base chance a spawn attempts to be a ship
+    enemyShipHealth: 3, // Max health for enemy ships
     enemyShipSpeed: 2,
     enemyShipPoints: 50,
     enemyShipShootTimerMin: 80,
@@ -53,14 +52,14 @@
     particles: {
       count: 25,
       speed: 4,
-      life: 60,
+      life: 60, // Frames
       radiusMin: 1,
       radiusMax: 3,
     },
     ambientParticles: {
       spawnChance: 0.3,
       speed: 1,
-      life: 100,
+      life: 100, // Frames
       radiusMin: 0.5,
       radiusMax: 2.0,
     },
@@ -68,13 +67,13 @@
       shieldSpawnChance: 0.003,
       laserSpawnChance: 0.002,
       droneSpawnChance: 0.0015,
-      shieldDuration: 300,
-      droneDuration: 600,
-      powerUpSize: 30,
+      shieldDuration: 300, // Frames (5 seconds)
+      droneDuration: 600, // Frames (10 seconds)
+      powerUpSize: 30, // General size for S, L, D
       powerUpSpeed: 2,
-      droneShootCooldown: 45,
-      extraShipScoreInterval: 10000,
-      extraShipPowerUpSize: 40,
+      droneShootCooldown: 45, // Frames between drone shots
+      extraShipScoreInterval: 10000, // Score needed for powerup to appear
+      extraShipPowerUpSize: 40,      // Visual size of the falling ship powerup
       extraShipPowerUpSpeed: 2.5,
       extraShipPowerUpRotationSpeedMin: 0.03,
       extraShipPowerUpRotationSpeedMax: 0.08,
@@ -92,18 +91,24 @@
       fadeInSpeed: 0.005,
       fadeOutSpeed: 0.005,
       maxOpacity: 0.5,
-      duration: 300,
+      duration: 300, // Frames
     },
     combo: {
-      resetFrames: 180,
+      resetFrames: 180, // Frames (3 seconds) without hit to reset combo
     },
     initialLives: 3,
+    // Level Advancement: Kill required ships to increase the *limit* of concurrent ships allowed by spawnEnemy
     levelRequirements: {
        1: { ship2: 1, ship3: 0 }, 2: { ship2: 0, ship3: 1 }, 3: { ship2: 1, ship3: 1 },
        4: { ship2: 2, ship3: 1 }, 5: { ship2: 1, ship3: 2 }, 6: { ship2: 2, ship3: 2 },
+       7: { ship2: 3, ship3: 2 }, 8: { ship2: 2, ship3: 3 }, 9: { ship2: 3, ship3: 3 },
+       10: { ship2: 4, ship3: 3}, 11: { ship2: 3, ship3: 4}, 12: { ship2: 4, ship3: 4},
+       13: { ship2: 5, ship3: 4}, 14: { ship2: 4, ship3: 5}, 15: { ship2: 5, ship3: 5},
+       16: { ship2: 6, ship3: 5}, 17: { ship2: 6, ship3: 6},
+       // After level 17, the ship limit stays at 17, but you could add more kill reqs here if desired.
     },
-    levelTransitionDuration: 180,
-    sfxVolume: 0.5,
+    levelTransitionDuration: 180, // Frames (3 seconds) for level title screen
+    sfxVolume: 0.5, // General volume for sound effects (0.0 to 1.0)
   };
 
   // ---- Asset Definitions ----
@@ -114,7 +119,7 @@
     explosionSound: { src: 'explosion.mp3', audio: null, volume: config.sfxVolume },
     laserSound: { src: 'laser.mp3', audio: null, volume: config.sfxVolume },
     droneSound: { src: 'drone.mp3', audio: null, volume: config.sfxVolume },
-    powerUpGetSound: { src: 'explosion.mp3', audio: null, volume: config.sfxVolume * 1.2 },
+    powerUpGetSound: { src: 'explosion.mp3', audio: null, volume: config.sfxVolume * 1.2 }, // Reuses explosion
     backgroundMusic: { src: 'background.mp3', audio: null, loop: true, volume: 0.4 },
   };
 
@@ -177,7 +182,32 @@
   // ---- Canvas & UI Setup ----
   function setupCanvas() { canvas = document.getElementById('gameCanvas'); if (!canvas) { console.error("Canvas element not found!"); return; } ctx = canvas.getContext('2d'); setCanvasSize(); window.addEventListener('resize', setCanvasSize); }
   function setCanvasSize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; if (!gameActive && !gameStarted) { player.x = canvas.width / 2; player.y = canvas.height - 100; } }
-  function setupUI() { scoreElement = document.getElementById('score'); highScoreElement = document.getElementById('highScore'); livesElement = document.getElementById('lives'); comboElement = document.getElementById('combo'); startScreen = document.getElementById('startScreen'); startMessage = document.getElementById('startMessage'); pauseScreen = document.getElementById('pauseScreen'); if (!scoreElement || !highScoreElement || !livesElement || !comboElement || !startScreen || !startMessage || !pauseScreen) { console.error("One or more UI elements are missing from the HTML!"); } highScore = localStorage.getItem('highScore') || 0; updateScoreboard(); startMessage.addEventListener('click', handleStartClick); canvas.addEventListener('touchstart', handleTouchStart, { passive: false }); canvas.addEventListener('touchmove', handleTouchMove, { passive: false }); canvas.addEventListener('touchend', handleTouchEnd); canvas.addEventListener('mousemove', handleMouseMove); canvas.addEventListener('click', handleMouseClick); document.addEventListener('keydown', handleKeyDown); }
+  function setupUI() {
+      scoreElement = document.getElementById('score');
+      highScoreElement = document.getElementById('highScore');
+      livesElement = document.getElementById('lives');
+      comboElement = document.getElementById('combo');
+      startScreen = document.getElementById('startScreen');
+      startMessage = document.getElementById('startMessage');
+      pauseScreen = document.getElementById('pauseScreen');
+      if (!scoreElement || !highScoreElement || !livesElement || !comboElement || !startScreen || !startMessage || !pauseScreen) { console.error("One or more UI elements are missing from the HTML!"); }
+
+      // *** UPDATED: Explicitly parse high score from localStorage ***
+      highScore = parseInt(localStorage.getItem('highScore'), 10) || 0;
+      // Ensure highScore is a valid number, default to 0 if not
+      if (isNaN(highScore)) {
+          highScore = 0;
+      }
+
+      updateScoreboard(); // Initial update
+      startMessage.addEventListener('click', handleStartClick);
+      canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+      canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+      canvas.addEventListener('touchend', handleTouchEnd);
+      canvas.addEventListener('mousemove', handleMouseMove);
+      canvas.addEventListener('click', handleMouseClick);
+      document.addEventListener('keydown', handleKeyDown);
+    }
   function updateScoreboard() { if(scoreElement) scoreElement.textContent = score; if(highScoreElement) highScoreElement.textContent = highScore; if(livesElement) livesElement.textContent = lives; if(comboElement) comboElement.textContent = comboCount > 0 ? comboCount : 0; }
 
   // ---- Input Handlers ----
@@ -201,7 +231,6 @@
   function handleShooting() {
     if (frameCount < lastShotFrame + config.player.shootCooldown) return;
     lastShotFrame = frameCount;
-
     if (player.hasLaser) {
         assetManager.playSound('laserSound'); // Play sound once per trigger
         const offsetY = player.size / 2;
@@ -228,7 +257,7 @@
     const endY = 0; const segments = []; const segmentCount = 10;
     for (let i = 0; i <= segmentCount; i++) { let t = i / segmentCount; segments.push({ x: startX + (Math.random() - 0.5) * 15, y: startY + (endY - startY) * t }); }
     activeLaserEffects.push({ pathPoints: segments, lifetime: 5, initialAlpha: 1.0, initialWidth: 5 });
-    checkLaserCollisions(segments); // Collision check still happens once per frame effectively, even if called multiple times
+    checkLaserCollisions(segments);
   }
   function fireDroneLaser() { assetManager.playSound('droneSound'); const startX = dronePos.x; const startY = dronePos.y; const endY = 0; const segments = []; const segmentCount = 8; for (let i = 0; i <= segmentCount; i++) { let t = i / segmentCount; segments.push({ x: startX + (Math.random() - 0.5) * 10, y: startY + (endY - startY) * t }); } activeLaserEffects.push({ pathPoints: segments, lifetime: 5, initialAlpha: 0.8, initialWidth: 4 }); checkLaserCollisions(segments); }
   function checkLaserCollisions(pathPoints) {
@@ -238,8 +267,7 @@
           if (enemy.exploded) continue;
           const dx = enemy.x - point.x; const dy = enemy.y - point.y;
           const distance = Math.sqrt(dx * dx + dy * dy);
-          // Use laserWidthBonus from config
-          if (distance < enemy.size / 2 + config.laser.widthBonus) {
+          if (distance < enemy.size / 2 + config.laser.widthBonus) { // Use widthBonus
               handleLaserEnemyCollision(enemy, i);
           }
       }
@@ -264,6 +292,7 @@
 
   // ---- Enemies (All Types) ----
   function scheduleEnemySpawn(delay) { if (!gameActive || showingLevelTransition) return; if (enemySpawnTimerId) clearTimeout(enemySpawnTimerId); const currentDelay = delay !== undefined ? delay : currentEnemySpawnRate; enemySpawnTimerId = setTimeout(() => { if (gameActive && !paused && !showingLevelTransition) { spawnEnemy(); const scoreFactorReduction = Math.floor(score / config.enemies.spawnRateScoreFactor); currentEnemySpawnRate = Math.max(config.enemies.minSpawnRate, config.enemies.spawnRateInitial - scoreFactorReduction * 10); scheduleEnemySpawn(); } }, currentDelay); }
+  // THIS FUNCTION NOW LIMITS CONCURRENT SHIPS BASED ON LEVEL
   function spawnEnemy() { const roll = Math.random(); const isShipAttempt = roll < config.enemyShipChance; if (isShipAttempt) { const maxShipsAllowed = Math.min(level, 17); let currentActiveShips = 0; for (const enemy of enemies) { if (enemy.type === 'ship' && !enemy.exploded) { currentActiveShips++; } } if (currentActiveShips < maxShipsAllowed) { spawnEnemyShip(); } else { spawnRegularMeteor(); } } else { spawnRegularMeteor(); } }
   function spawnRegularMeteor() { const size = config.enemies.size; enemies.push({ x: Math.random() * (canvas.width - size) + size / 2, y: -size / 2, size: size, speed: config.enemies.speed * getRandom(0.9, 1.2), frame: 0, exploded: false, type: 'regular', health: 1, rotation: 0, rotationSpeed: (Math.random() > 0.5 ? 1 : -1) * getRandom(config.enemies.rotationSpeedMin, config.enemies.rotationSpeedMax), vx: 0, }); }
   function spawnLargeMeteor() { const size = config.enemies.size * config.largeMeteor.sizeMultiplier; enemies.push({ x: Math.random() * (canvas.width - size) + size / 2, y: -size / 2, size: size, speed: config.enemies.speed * 0.7, frame: 0, exploded: false, type: 'large', health: config.largeMeteor.health, rotation: 0, rotationSpeed: (Math.random() > 0.5 ? 1 : -1) * getRandom(config.enemies.rotationSpeedMin * 0.5, config.enemies.rotationSpeedMax * 0.5), vx: 0, }); nextLargeMeteorScore += config.largeMeteor.spawnScoreInterval; console.log("Large Meteor Spawned!"); }
@@ -332,7 +361,7 @@
   function checkHighScore() { if (score > highScore) { highScore = score; localStorage.setItem('highScore', highScore); updateScoreboard(); } }
 
   // ---- Level & Advancement ----
-   function checkLevelCompletion() { const req = config.levelRequirements[level]; if (!req && level <= 17) { /* Stick to reqs */ return; } if (!req) return; if (enemyShipsDestroyedThisLevel.ship2 >= req.ship2 && enemyShipsDestroyedThisLevel.ship3 >= req.ship3) { if (!showingLevelTransition) { triggerLevelTransition(); } } }
+   function checkLevelCompletion() { const req = config.levelRequirements[level]; if (!req && level <= 17) { return; } if (!req) return; if (enemyShipsDestroyedThisLevel.ship2 >= req.ship2 && enemyShipsDestroyedThisLevel.ship3 >= req.ship3) { if (!showingLevelTransition) { triggerLevelTransition(); } } }
    function triggerLevelTransition() { console.log(`Level ${level} complete! Starting transition...`); showingLevelTransition = true; levelTransitionTimer = config.levelTransitionDuration; if (enemySpawnTimerId) clearTimeout(enemySpawnTimerId); clearEnemiesOfType('ship'); score += level * 100; updateScoreboard(); checkHighScore(); }
    function finishLevelTransition() { showingLevelTransition = false; level++; enemyShipsDestroyedThisLevel.ship2 = 0; enemyShipsDestroyedThisLevel.ship3 = 0; currentEnemySpawnRate = Math.max(config.enemies.minSpawnRate, currentEnemySpawnRate - 50); scheduleEnemySpawn(500); console.log(`Starting Level ${level}`); }
    function clearEnemiesOfType(typeToClear) { for (let i = enemies.length - 1; i >= 0; i--) { if (enemies[i].type === typeToClear && !enemies[i].exploded) { createExplosion(enemies[i].x, enemies[i].y, 10, 2, 30); enemies.splice(i, 1); } } }
