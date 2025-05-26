@@ -29,5 +29,26 @@
   <div id="pauseScreen">Paused</div>
 
   <script src="game.js"></script>
+  <script>
+  // Request fullscreen as soon as the page loads
+  window.addEventListener('load', () => {
+    const requestFullScreen = () => {
+      const element = document.documentElement;
+      const requestMethod = element.requestFullscreen || element.webkitRequestFullscreen || element.mozRequestFullScreen || element.msRequestFullscreen;
+
+      if (requestMethod) {
+        requestMethod.call(element).catch(err => {
+          console.warn('Fullscreen request failed or was blocked:', err);
+        });
+      }
+    };
+
+    // Auto request fullscreen with user interaction fallback
+    requestFullScreen();
+
+    // Optional: re-try on user click if blocked initially
+    document.addEventListener('click', requestFullScreen, { once: true });
+  });
+</script>
 </body>
 </html>
