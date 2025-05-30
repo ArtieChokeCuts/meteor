@@ -119,8 +119,8 @@
     explosionSound: { src: 'explosion.mp3', audio: null, volume: config.sfxVolume },
     laserSound: { src: 'laser.mp3', audio: null, volume: config.sfxVolume },
     droneSound: { src: 'drone.mp3', audio: null, volume: config.sfxVolume },
-    powerUpGetSound: { src: 'explosion.mp3', audio: null, volume: config.sfxVolume * 1.2 }, // Reuses explosion
-    backgroundMusic: { src: 'background.mp3', audio: null, loop: true, volume: 0.4 },
+    powerUpGetSound: { src: 'explosion.mp3', audio: null, volume: config.sfxVolume * 0.8 }, // Reuses explosion
+    backgroundMusic: { src: 'background.mp3', audio: null, loop: true, volume: 0.9 },
   };
 
   // ---- Sprite Data ----
