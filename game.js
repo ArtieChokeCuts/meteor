@@ -253,6 +253,21 @@
       }
     }
   };
+function handleStartClick() {
+    if (assetManager.assetsLoaded === assetManager.totalAssets) {
+        if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioContext.state === 'suspended') {
+            audioContext.resume();
+        }
+        startScreen.style.display = 'none';
+        startGame();
+    } else {
+        console.warn("Assets not fully loaded yet.");
+        startMessage.innerHTML = "<strong>Loading... Please Wait</strong>";
+    }
+}
 
   // ---- Canvas & UI Setup ----
   function setupCanvas() {
