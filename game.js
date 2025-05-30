@@ -67,7 +67,7 @@
       shieldSpawnChance: 0.003,
       laserSpawnChance: 0.002,
       droneSpawnChance: 0.0015,
-      shieldDuration: 300, // Frames (5 seconds)
+      shieldDuration: 300, // Frames (10 seconds)
       droneDuration: 600, // Frames (10 seconds)
       powerUpSize: 30, // General size for S, L, D
       powerUpSpeed: 2,
