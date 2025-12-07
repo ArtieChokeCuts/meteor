@@ -158,7 +158,7 @@
   const droneSize = player.size * 0.6;
   let droneOrbitAngle = 0;
   let dronePos = { x: 0, y: 0 };
-  let audioContext;
+  let audioContext = null; // Initialize as null
 
   // ---- Utility Functions ----
   function getRandom(min, max) { return Math.random() * (max - min) + min; }
@@ -175,8 +175,38 @@
     assetError(key, callback) { console.error(`Failed to load asset: ${key}`); this.assetsLoaded++; startMessage.innerHTML = `<strong>Loading Assets... ${this.assetsLoaded}/${this.totalAssets} (Error loading ${key})</strong>`; if (this.assetsLoaded === this.totalAssets) { console.warn("Finished loading assets, but some failed."); callback(); } },
     getSpriteSheet() { return assets.spritesheet.image; },
     getShipsDroneSheet() { return assets.shipsDrone.image; },
-    playSound(key) { const audio = assets[key]?.audio; if (audio) { if (audioContext && audioContext.state === 'suspended') { audioContext.resume().then(() => { audio.currentTime = 0; audio.play().catch(e => console.warn(`Audio play failed for ${key}: ${e.message}`)); }); } else { audio.currentTime = 0; audio.play().catch(e => console.warn(`Audio play failed for ${key}: ${e.message}`)); } } else { console.warn(`Sound asset not found or loaded: ${key}`); } },
-    playMusic() { const music = assets.backgroundMusic?.audio; if (music && music.paused) { if (!audioContext) { audioContext = new (window.AudioContext || window.webkitAudioContext)(); } if (audioContext.state === 'suspended') { audioContext.resume().then(() => { music.play().catch(e => console.warn(`Background music play failed: ${e.message}`)); }); } else { music.play().catch(e => console.warn(`Background music play failed: ${e.message}`)); } } },
+    // *** FIX: Improved sound playback handling ***
+    playSound(key) { 
+        const audio = assets[key]?.audio; 
+        if (audio) { 
+            // Check if AudioContext needs to be initialized/resumed on user action
+            if (audioContext && audioContext.state === 'suspended') {
+                 audioContext.resume().then(() => {
+                    audio.currentTime = 0; 
+                    audio.play().catch(e => console.warn(`Audio play failed for ${key}: ${e.message}`)); 
+                });
+            } else {
+                audio.currentTime = 0; 
+                audio.play().catch(e => console.warn(`Audio play failed for ${key}: ${e.message}`)); 
+            }
+        } else { console.warn(`Sound asset not found or loaded: ${key}`); } 
+    },
+    playMusic() { 
+        const music = assets.backgroundMusic?.audio; 
+        if (music && music.paused) { 
+            // Ensure AudioContext is initialized on first user interaction
+            if (!audioContext) { 
+                audioContext = new (window.AudioContext || window.webkitAudioContext)(); 
+            }
+            if (audioContext.state === 'suspended') { 
+                audioContext.resume().then(() => { 
+                    music.play().catch(e => console.warn(`Background music play failed: ${e.message}`)); 
+                }); 
+            } else { 
+                music.play().catch(e => console.warn(`Background music play failed: ${e.message}`)); 
+            } 
+        } 
+    },
     stopMusic() { const music = assets.backgroundMusic?.audio; if (music) { music.pause(); music.currentTime = 0; } }
   };
 
@@ -233,7 +263,26 @@
 
 
   // ---- Input Handlers ----
-  function handleStartClick() { if (assetManager.assetsLoaded === assetManager.totalAssets) { if (!audioContext) { audioContext = new (window.AudioContext || window.webkitAudioContext)(); } if (audioContext.state === 'suspended') { audioContext.resume(); } startScreen.style.display = 'none'; startGame(); } else { console.warn("Assets not fully loaded yet."); startMessage.innerHTML = "<strong>Loading... Please Wait</strong>"; } }
+  // *** FIX: Ensure AudioContext is initialized/resumed on the first click ***
+  function handleStartClick() { 
+    if (assetManager.assetsLoaded === assetManager.totalAssets) { 
+        if (!audioContext) { 
+            audioContext = new (window.AudioContext || window.webkitAudioContext)(); 
+        }
+        if (audioContext.state === 'suspended') { 
+            audioContext.resume().then(() => {
+                 startScreen.style.display = 'none'; 
+                 startGame(); 
+            });
+        } else {
+            startScreen.style.display = 'none'; 
+            startGame(); 
+        }
+    } else { 
+        console.warn("Assets not fully loaded yet."); 
+        startMessage.innerHTML = "<strong>Loading... Please Wait</strong>"; 
+    } 
+  }
   function handleMouseMove(e) { if (!gameActive || paused || showingLevelTransition) return; player.x = e.clientX; player.y = e.clientY; player.x = Math.max(player.size / 2, Math.min(canvas.width - player.size / 2, player.x)); player.y = Math.max(player.size / 2, Math.min(canvas.height - player.size / 2, player.y)); }
   function handleMouseClick() { if (!gameStarted || paused || showingLevelTransition) return; if (audioContext && audioContext.state === 'suspended') { audioContext.resume(); } assetManager.playMusic(); handleShooting(); }
   function handleTouchStart(e) { if (!gameStarted || paused || showingLevelTransition) return; e.preventDefault(); if (audioContext && audioContext.state === 'suspended') { audioContext.resume(); } assetManager.playMusic(); if (e.touches.length > 0) { const touch = e.touches[0]; player.x = touch.clientX; player.y = touch.clientY; player.x = Math.max(player.size / 2, Math.min(canvas.width - player.size / 2, player.x)); player.y = Math.max(player.size / 2, Math.min(canvas.height - player.size / 2, player.y)); } }
@@ -257,15 +306,4 @@
         assetManager.playSound('laserSound'); // Play sound once per trigger
         const offsetY = player.size / 2;
         fireLaserFromPosition(player.x, player.y - offsetY); // Center
-        if (playerShipCount >= 2) { const wingmanX = player.x - config.player.shipFormationOffsetX; const wingmanY = player.y + config.player.shipFormationOffsetY; fireLaserFromPosition(wingmanX, wingmanY - offsetY); } // Left
-        if (playerShipCount >= 3) { const wingmanX = player.x + config.player.shipFormationOffsetX; const wingmanY = player.y + config.player.shipFormationOffsetY; fireLaserFromPosition(wingmanX, wingmanY - offsetY); } // Right
-    } else {
-      shootBullet(); // Fires bullets from all ships
-    }
-  }
-  function shootBullet() {
-    assetManager.playSound('shootSound');
-    const bulletCommon = { width: config.bullets.width, height: config.bullets.height, speed: config.bullets.speed, transformed: false, transformationTimer: 0, hasBounced: false };
-    const offsetY = player.size / 2;
-    bullets.push({ ...bulletCommon, x: player.x, y: player.y - offsetY }); // Center
-    if (playerShipCount >= 2) { const wingmanX = player.x - 
+        if (playerShipCount 
