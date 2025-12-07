@@ -385,12 +385,17 @@
       }
 
       updateScoreboard(); // Initial update
-      startMessage.addEventListener('click', handleStartClick);
-      canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-      canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-      canvas.addEventListener('touchend', handleTouchEnd);
-      canvas.addEventListener('mousemove', handleMouseMove);
-      canvas.addEventListener('click', handleMouseClick);
+      // Wire up UI interactions (only if the elements exist)
+      if (startMessage) startMessage.addEventListener('click', handleStartClick);
+      if (canvas) {
+          canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+          canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+          canvas.addEventListener('touchend', handleTouchEnd);
+          canvas.addEventListener('mousemove', handleMouseMove);
+          canvas.addEventListener('click', handleMouseClick);
+      } else {
+          console.warn('Canvas not available when wiring input handlers.');
+      }
       document.addEventListener('keydown', handleKeyDown);
     }
   function updateScoreboard() { if(scoreElement) scoreElement.textContent = score; if(highScoreElement) highScoreElement.textContent = highScore; if(livesElement) livesElement.textContent = lives; if(comboElement) comboElement.textContent = comboCount > 0 ? comboCount : 0; }
@@ -699,6 +704,204 @@
   function drawParticles() {}
   function drawAmbientParticles() {}
 
+  // ---- Extra Ship PowerUp & Large Meteor Spawners (Minimal Implementations) ----
+  function spawnLargeMeteor() {
+      if (!canvas) return;
+      const baseSize = config.enemies.size;
+      const size = Math.floor(baseSize * config.largeMeteor.sizeMultiplier);
+      const large = {
+          x: getRandom(size, canvas.width - size),
+          y: -size,
+          size: size,
+          speed: Math.max(1, config.enemies.speed * 0.6),
+          isLargeMeteor: true,
+          isShip: false,
+          health: config.largeMeteor.health,
+          points: config.largeMeteor.health * config.largeMeteor.pointsPerHit,
+          rotation: 0,
+          rotationSpeed: getRandom(config.enemies.rotationSpeedMin, config.enemies.rotationSpeedMax) * (Math.random() > 0.5 ? 1 : -1)
+      };
+      enemies.push(large);
+  }
+
+  function spawnExtraShipPowerUp() {
+      if (!canvas) return;
+      const size = config.powerUps.extraShipPowerUpSize;
+      const p = {
+          x: getRandom(size, canvas.width - size),
+          y: -size,
+          size: size,
+          speed: config.powerUps.extraShipPowerUpSpeed,
+          rotation: 0,
+          rotationSpeed: getRandom(config.powerUps.extraShipPowerUpRotationSpeedMin, config.powerUps.extraShipPowerUpRotationSpeedMax) * (Math.random() > 0.5 ? 1 : -1)
+      };
+      extraShipPowerUps.push(p);
+  }
+
+  function drawExtraShipPowerUps() {
+      if (!canvas) return;
+      for (let i = extraShipPowerUps.length - 1; i >= 0; i--) {
+          const p = extraShipPowerUps[i];
+          // Update position
+          p.y += p.speed;
+          p.rotation += p.rotationSpeed;
+
+          // Draw (simple rotating ship-shaped triangle)
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rotation);
+          ctx.fillStyle = '#0ff';
+          ctx.beginPath();
+          ctx.moveTo(0, -p.size / 2);
+          ctx.lineTo(-p.size / 2, p.size / 2);
+          ctx.lineTo(p.size / 2, p.size / 2);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+
+          // Off-screen cleanup
+          if (p.y - p.size > canvas.height) {
+              extraShipPowerUps.splice(i, 1);
+              continue;
+          }
+
+          // Collision with player
+          const pickupObj = { x: p.x, y: p.y, size: p.size };
+          const playerObj = { x: player.x, y: player.y, size: player.size };
+          if (checkCollision(pickupObj, playerObj)) {
+              // Grant extra ship (up to 3)
+              if (playerShipCount < 3) {
+                  playerShipCount++;
+                  assetManager.playSound('powerUpGetSound');
+              }
+              extraShipPowerUps.splice(i, 1);
+          }
+      }
+  }
+
+  // ---- Updates: Enemies, Projectiles, Collisions ----
+  function updateEnemies() {
+      if (!canvas) return;
+      for (let i = enemies.length - 1; i >= 0; i--) {
+          const e = enemies[i];
+          // Basic movement
+          e.y += e.speed || 0;
+          e.rotation = (e.rotation || 0) + (e.rotationSpeed || 0);
+
+          // Off-screen cleanup
+          if (e.y - e.size / 2 > canvas.height + 100) {
+              enemies.splice(i, 1);
+              continue;
+          }
+
+          // Enemy ship shooting logic
+          if (e.isShip) {
+              e.shootTimer = e.shootTimer === undefined ? Math.floor(getRandom(config.enemyShipShootTimerMin, config.enemyShipShootTimerMax)) : e.shootTimer;
+              e.shootTimer--;
+              if (e.shootTimer <= 0) {
+                  // Fire a projectile towards the player
+                  const dx = player.x - e.x;
+                  const dy = player.y - e.y;
+                  const mag = Math.sqrt(dx * dx + dy * dy) || 1;
+                  const vx = (dx / mag) * config.shipProjectileSpeed;
+                  const vy = (dy / mag) * config.shipProjectileSpeed;
+                  shipProjectiles.push({ x: e.x, y: e.y, vx: vx, vy: vy, size: config.shipProjectileSize });
+                  e.shootTimer = Math.floor(getRandom(config.enemyShipShootTimerMin, config.enemyShipShootTimerMax));
+                  assetManager.playSound('shootSound');
+              }
+          }
+
+          // Collision with player (simple)
+          if (checkCollision(e, player)) {
+              // Remove enemy and reduce life
+              enemies.splice(i, 1);
+              lives--;
+              updateScoreboard();
+              if (lives <= 0) {
+                  gameOver();
+                  return;
+              }
+          }
+      }
+  }
+
+  function updateShipProjectiles() {
+      if (!canvas) return;
+      for (let i = shipProjectiles.length - 1; i >= 0; i--) {
+          const p = shipProjectiles[i];
+          p.x += p.vx;
+          p.y += p.vy;
+
+          if (p.x < -50 || p.x > canvas.width + 50 || p.y < -50 || p.y > canvas.height + 50) {
+              shipProjectiles.splice(i, 1);
+              continue;
+          }
+
+          // Simple collision with player
+          if (checkCollision(p, player)) {
+              shipProjectiles.splice(i, 1);
+              lives--;
+              updateScoreboard();
+              if (lives <= 0) {
+                  gameOver();
+                  return;
+              }
+          }
+      }
+  }
+
+  function handleBulletEnemyCollisions() {
+      if (!canvas) return;
+      for (let i = bullets.length - 1; i >= 0; i--) {
+          const b = bullets[i];
+          for (let j = enemies.length - 1; j >= 0; j--) {
+              const e = enemies[j];
+              if (e.exploded) continue;
+              const dx = b.x - e.x;
+              const dy = b.y - e.y;
+              const distance = Math.sqrt(dx * dx + dy * dy);
+              const bulletRadius = Math.max(b.width || 0, b.height || 0) / 2 || 2;
+              const collisionRadius = e.size / 2 + bulletRadius;
+
+              if (distance < collisionRadius) {
+                  // Hit detected
+                  if (e.isLargeMeteor) {
+                      // Large meteor takes damage but doesn't always destroy on one hit
+                      e.health--;
+                      addScore(config.largeMeteor.pointsPerHit);
+                      b.transformed = true;
+                      b.transformationTimer = config.bullets.bounceLife;
+                      // Nudge meteor horizontally
+                      e.x += (b.x < e.x ? -1 : 1) * config.largeMeteor.bounceForce * (Math.random() * 1.5);
+                      if (e.health <= 0) {
+                          destroyEnemy(e, j);
+                      }
+                  } else if (e.isShip) {
+                      e.health--;
+                      if (e.health <= 0) {
+                          destroyEnemy(e, j);
+                      }
+                      bullets.splice(i, 1);
+                  } else {
+                      // Standard asteroid or small enemy: instant destroy
+                      destroyEnemy(e, j);
+                      bullets.splice(i, 1);
+                  }
+                  break; // go next bullet
+              }
+          }
+      }
+  }
+
+  function gameOver() {
+      gameActive = false;
+      gameStarted = false;
+      if (enemySpawnTimerId) { clearTimeout(enemySpawnTimerId); enemySpawnTimerId = null; }
+      assetManager.stopMusic();
+      if (startScreen) startScreen.style.display = 'flex';
+      startMessage.innerHTML = '<strong>CLICK TO START</strong>';
+  }
+
   // ---- Main Drawing Function (Modified to use new functions) ----
   function draw() {
     if (paused) return;
@@ -738,14 +941,14 @@
     // Update Logic
     updateStarLayers();
     updateNebula();
-    // updatePlayer(); // Assuming player position is handled by input
+    // updatePlayer(); // Player position handled via input events
     updateBullets();
-    // updateEnemies(); // Placeholder
-    // updateShipProjectiles(); // Placeholder
-    // updateCollisions(); // Placeholder
-    // updateParticles(); // Placeholder
-    // updatePowerUps(); // Placeholder
-    // updateDrone(); // Placeholder
+    updateEnemies();
+    updateShipProjectiles();
+    handleBulletEnemyCollisions();
+    // updateParticles(); // Placeholder for future particles logic
+    // updatePowerUps(); // Placeholder for future power-up logic
+    // updateDrone(); // Placeholder for drone logic
 
     // Combo Timer
     if (comboTimer > 0) comboTimer--;
