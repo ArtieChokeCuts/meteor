@@ -111,17 +111,16 @@
     sfxVolume: 0.5, // General volume for sound effects (0.0 to 1.0)
   };
 
-  // ---- Asset Definitions ----
-  // *** FIXED: Added 'assets/' path prefix to all file sources ***
+  // ---- Asset Definitions (FIXED PATHS FOR ROOT DIRECTORY) ----
   const assets = {
-    spritesheet: { src: 'assets/final_corrected_game_sprite_sheet.png', image: null },
-    shipsDrone: { src: 'assets/ships_drone.png', image: null },
-    shootSound: { src: 'assets/shoot.mp3', audio: null, volume: config.sfxVolume },
-    explosionSound: { src: 'assets/explosion.mp3', audio: null, volume: config.sfxVolume },
-    laserSound: { src: 'assets/laser.mp3', audio: null, volume: config.sfxVolume },
-    droneSound: { src: 'assets/drone.mp3', audio: null, volume: config.sfxVolume },
-    powerUpGetSound: { src: 'assets/explosion.mp3', audio: null, volume: config.sfxVolume * 0.8 }, // Reuses explosion
-    backgroundMusic: { src: 'assets/background.mp3', audio: null, loop: true, volume: 0.9 },
+    spritesheet: { src: 'final_corrected_game_sprite_sheet.png', image: null },
+    shipsDrone: { src: 'ships_drone.png', image: null },
+    shootSound: { src: 'shoot.mp3', audio: null, volume: config.sfxVolume },
+    explosionSound: { src: 'explosion.mp3', audio: null, volume: config.sfxVolume },
+    laserSound: { src: 'laser.mp3', audio: null, volume: config.sfxVolume },
+    droneSound: { src: 'drone.mp3', audio: null, volume: config.sfxVolume },
+    powerUpGetSound: { src: 'explosion.mp3', audio: null, volume: config.sfxVolume * 0.8 }, // Reuses explosion
+    backgroundMusic: { src: 'background.mp3', audio: null, loop: true, volume: 0.9 },
   };
 
   // ---- Sprite Data ----
@@ -171,7 +170,10 @@
   const assetManager = {
     assetsLoaded: 0,
     totalAssets: Object.keys(assets).length,
-    loadAssets(callback) { console.log("Loading assets..."); startMessage.innerHTML = `<strong>Loading Assets... 0/${this.totalAssets}</strong>`; for (const key in assets) { const asset = assets[key]; if (asset.src.endsWith('.png')) { asset.image = new Image(); asset.image.onload = () => this.assetLoaded(key, callback); asset.image.onerror = () => this.assetError(key, callback); asset.image.src = asset.src; } else if (asset.src.endsWith('.mp3')) { asset.audio = new Audio(); asset.audio.addEventListener('canplaythrough', () => this.assetLoaded(key, callback), { once: true }); asset.audio.onerror = () => this.assetError(key, callback); asset.audio.src = asset.src; if (asset.volume !== undefined) { asset.audio.volume = asset.volume; } if (asset.loop) asset.audio.loop = true; asset.audio.load(); } } },
+    loadAssets(callback) { console.log("Loading assets..."); startMessage.innerHTML = `<strong>Loading Assets... 0/${this.totalAssets}</strong>`; for (const key in assets) { const asset = assets[key]; if (asset.src && asset.src.endsWith('.png')) { asset.image = new Image(); asset.image.onload = () => this.assetLoaded(key, callback); asset.image.onerror = () => this.assetError(key, callback); asset.image.src = asset.src; } else if (asset.src && asset.src.endsWith('.mp3')) { asset.audio = new Audio(); asset.audio.addEventListener('canplaythrough', () => this.assetLoaded(key, callback), { once: true }); asset.audio.onerror = () => this.assetError(key, callback); asset.audio.src = asset.src; if (asset.volume !== undefined) { asset.audio.volume = asset.volume; } if (asset.loop) asset.audio.loop = true; asset.audio.load(); } else { // Handle null src case for synthesis or skip
+          this.assetLoaded(key, callback);
+        }
+    } },
     assetLoaded(key, callback) { this.assetsLoaded++; console.log(`Loaded: ${key} (${this.assetsLoaded}/${this.totalAssets})`); startMessage.innerHTML = `<strong>Loading Assets... ${this.assetsLoaded}/${this.totalAssets}</strong>`; if (this.assetsLoaded === this.totalAssets) { console.log("All assets loaded."); callback(); } },
     assetError(key, callback) { console.error(`Failed to load asset: ${key}`); this.assetsLoaded++; startMessage.innerHTML = `<strong>Loading Assets... ${this.assetsLoaded}/${this.totalAssets} (Error loading ${key})</strong>`; if (this.assetsLoaded === this.totalAssets) { console.warn("Finished loading assets, but some failed."); callback(); } },
     getSpriteSheet() { return assets.spritesheet.image; },
@@ -180,8 +182,8 @@
     playSound(key) { 
         const audio = assets[key]?.audio; 
         if (audio) { 
-            // Check if AudioContext needs to be initialized/resumed on user action
-            if (audioContext && audioContext.state === 'suspended') {
+            if (!audioContext) { audioContext = new (window.AudioContext || window.webkitAudioContext)(); }
+            if (audioContext.state === 'suspended') {
                  audioContext.resume().then(() => {
                     audio.currentTime = 0; 
                     audio.play().catch(e => console.warn(`Audio play failed for ${key}: ${e.message}`)); 
@@ -195,7 +197,6 @@
     playMusic() { 
         const music = assets.backgroundMusic?.audio; 
         if (music && music.paused) { 
-            // Ensure AudioContext is initialized on first user interaction
             if (!audioContext) { 
                 audioContext = new (window.AudioContext || window.webkitAudioContext)(); 
             }
@@ -254,37 +255,6 @@
   function checkCollision(obj1, obj2) { const dx = obj1.x - obj2.x; const dy = obj1.y - obj2.y; const distance = Math.sqrt(dx * dx + dy * dy); const radiiSum = obj1.size / 2 + obj2.size / 2; return distance < radiiSum; }
   function addScore(points) { score += points * (comboCount > 0 ? comboCount : 1); comboCount++; comboTimer = config.combo.resetFrames; if (score > highScore) { highScore = score; localStorage.setItem('highScore', highScore.toString()); } updateScoreboard(); if (score >= nextLargeMeteorScore) { nextLargeMeteorScore += config.largeMeteor.spawnScoreInterval; spawnLargeMeteor(); } if (score >= nextExtraShipScore && playerShipCount < 3) { nextExtraShipScore += config.powerUps.extraShipScoreInterval; spawnExtraShipPowerUp(); } }
 
-  // ---- Canvas & UI Setup ----
-  function setupCanvas() { canvas = document.getElementById('gameCanvas'); if (!canvas) { console.error("Canvas element not found!"); return; } ctx = canvas.getContext('2d'); setCanvasSize(); window.addEventListener('resize', setCanvasSize); }
-  function setCanvasSize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; if (!gameActive && !gameStarted) { player.x = canvas.width / 2; player.y = canvas.height - 100; } }
-  function setupUI() {
-      scoreElement = document.getElementById('score');
-      highScoreElement = document.getElementById('highScore');
-      livesElement = document.getElementById('lives');
-      comboElement = document.getElementById('combo');
-      startScreen = document.getElementById('startScreen');
-      startMessage = document.getElementById('startMessage');
-      pauseScreen = document.getElementById('pauseScreen');
-      if (!scoreElement || !highScoreElement || !livesElement || !comboElement || !startScreen || !startMessage || !pauseScreen) { console.error("One or more UI elements are missing from the HTML!"); }
-
-      // *** UPDATED: Explicitly parse high score from localStorage ***
-      highScore = parseInt(localStorage.getItem('highScore'), 10) || 0;
-      // Ensure highScore is a valid number, default to 0 if not
-      if (isNaN(highScore)) {
-          highScore = 0;
-      }
-
-      updateScoreboard(); // Initial update
-      startMessage.addEventListener('click', handleStartClick);
-      canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-      canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-      canvas.addEventListener('touchend', handleTouchEnd);
-      canvas.addEventListener('mousemove', handleMouseMove);
-      canvas.addEventListener('click', handleMouseClick);
-      document.addEventListener('keydown', handleKeyDown);
-    }
-  function updateScoreboard() { if(scoreElement) scoreElement.textContent = score; if(highScoreElement) highScoreElement.textContent = highScore; if(livesElement) livesElement.textContent = lives; if(comboElement) comboElement.textContent = comboCount > 0 ? comboCount : 0; }
-  
   // Placeholder functions for game flow (must be defined later)
   function startGame() { gameStarted = true; gameActive = true; resetGame(); assetManager.playMusic(); initStarLayers(); scheduleEnemySpawn(); requestAnimationFrame(gameLoop); }
   function resetGame() { score = 0; lives = config.initialLives; level = 1; comboCount = 0; enemyShipsDestroyedThisLevel = { ship2: 0, ship3: 0 }; bullets.length = 0; enemies.length = 0; particles.length = 0; powerUps.length = 0; shipProjectiles.length = 0; activeLaserEffects.length = 0; extraShipPowerUps.length = 0; playerShipCount = 1; nextExtraShipScore = config.powerUps.extraShipScoreInterval; nextLargeMeteorScore = config.largeMeteor.spawnScoreInterval; player.hasLaser = false; player.laserTimer = 0; shieldTime = 0; droneActive = false; droneTimer = 0; updateScoreboard(); setCanvasSize(); }
@@ -305,9 +275,36 @@
       addScore(enemy.points || config.enemies.points); // Update score
   }
 
+  // ---- Canvas & UI Setup ----
+  function setupCanvas() { canvas = document.getElementById('gameCanvas'); if (!canvas) { console.error("Canvas element not found!"); return; } ctx = canvas.getContext('2d'); setCanvasSize(); window.addEventListener('resize', setCanvasSize); }
+  function setCanvasSize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; if (!gameActive && !gameStarted) { player.x = canvas.width / 2; player.y = canvas.height - 100; } }
+  function setupUI() {
+      scoreElement = document.getElementById('score');
+      highScoreElement = document.getElementById('highScore');
+      livesElement = document.getElementById('lives');
+      comboElement = document.getElementById('combo');
+      startScreen = document.getElementById('startScreen');
+      startMessage = document.getElementById('startMessage');
+      pauseScreen = document.getElementById('pauseScreen');
+      if (!scoreElement || !highScoreElement || !livesElement || !comboElement || !startScreen || !startMessage || !pauseScreen) { console.error("One or more UI elements are missing from the HTML!"); }
 
+      highScore = parseInt(localStorage.getItem('highScore'), 10) || 0;
+      if (isNaN(highScore)) {
+          highScore = 0;
+      }
+
+      updateScoreboard(); // Initial update
+      startMessage.addEventListener('click', handleStartClick);
+      canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+      canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+      canvas.addEventListener('touchend', handleTouchEnd);
+      canvas.addEventListener('mousemove', handleMouseMove);
+      canvas.addEventListener('click', handleMouseClick);
+      document.addEventListener('keydown', handleKeyDown);
+    }
+  function updateScoreboard() { if(scoreElement) scoreElement.textContent = score; if(highScoreElement) highScoreElement.textContent = highScore; if(livesElement) livesElement.textContent = lives; if(comboElement) comboElement.textContent = comboCount > 0 ? comboCount : 0; }
+  
   // ---- Input Handlers ----
-  // *** FIX: Ensure AudioContext is initialized/resumed on the first click ***
   function handleStartClick() { 
     if (assetManager.assetsLoaded === assetManager.totalAssets) { 
         if (!audioContext) { 
