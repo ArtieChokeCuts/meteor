@@ -1,1227 +1,861 @@
-(function() { // IIFE to encapsulate game logic
-  'use strict';
-
-  // ---- Configuration ----
-  const config = {
-    player: {
-      size: 50, // Keep consistent width/height for simplicity
-      speed: 7, // Base speed (not used with direct mouse follow)
-      shootCooldown: 10, // Frames between shots
-    },
-    bullets: {
-      width: 5,
-      height: 15,
-      speed: 10,
-      color: 'red',
-      transformedColor: 'orange',
-      bounceLife: 20, // Frames a bounced bullet lives
-    },
-    enemies: {
-      spawnRateInitial: 1200, // ms
-      spawnRateScoreFactor: 50, // Lower spawn rate by 1ms every N points
-      minSpawnRate: 400, // ms
-      size: 50,
-      speed: 3,
-      points: 10, // Base points per kill
-      rotationSpeedMin: 0.01,
-      rotationSpeedMax: 0.05,
-    },
-    largeMeteor: {
-        sizeMultiplier: 2.5,
-        health: 10,
-        pointsPerHit: 10,
-        spawnScoreInterval: 1500,
-        bounceForce: 2,
-        explosionParticles: 50, // More particles for big boom
-    },
-    particles: {
-      count: 25, // Default explosion particles
-      speed: 4,
-      life: 60, // Frames
-      radiusMin: 1,
-      radiusMax: 3,
-    },
-    ambientParticles: {
-        spawnChance: 0.3,
-        speed: 1,
-        life: 100,
-        radiusMin: 0.5,
-        radiusMax: 2.0,
-    },
-    powerUps: {
-      shieldSpawnChance: 0.003, // Chance per frame
-      shieldDuration: 300, // Frames (~5 seconds at 60fps)
-      shieldSize: 30,
-      shieldSpeed: 2,
-      extraShipScoreInterval: 1000,
-      extraShipSize: 50, // Match player size
-      extraShipSpeed: 2,
-      extraShipRotationSpeedMin: 0.05,
-      extraShipRotationSpeedMax: 0.1,
-    },
-    starfield: {
-      foregroundStars: 70,
-      backgroundStars: 70,
-      fgSpeedMin: 0.5,
-      fgSpeedMax: 1.2,
-      bgSpeedMin: 0.1,
-      bgSpeedMax: 0.4,
-    },
-    nebula: {
-      spawnChance: 0.0005, // Chance per frame
-      fadeInSpeed: 0.005,
-      fadeOutSpeed: 0.005,
-      maxOpacity: 0.5,
-      duration: 300, // Frames
-    },
-    combo: {
-      resetFrames: 180, // ~3 seconds at 60fps
-    },
-    initialLives: 3,
-  };
-
-  // ---- Asset Definitions ----
-  const assets = {
-    spritesheet: { src: 'final_corrected_game_sprite_sheet.png', image: null },
-    shootSound: { src: 'shoot.mp3', audio: null },
-    explosionSound: { src: 'explosion.mp3', audio: null },
-    backgroundMusic: { src: 'background.mp3', audio: null, loop: true, volume: 0.3 },
-  };
-
-  const sprites = {
-    spaceship: { x: 10, y: 10, width: 200, height: 200 },
-    asteroidIntact: { x: 230, y: 10, width: 200, height: 200 },
-    asteroidExploding: [
-      { x: 450, y: 10, width: 200, height: 200 },
-      { x: 670, y: 10, width: 200, height: 200 }
-    ]
-  };
-
-  // ---- Game State Variables ----
-  let canvas, ctx;
-  let scoreElement, highScoreElement, livesElement, comboElement;
-  let startScreen, startMessage, pauseScreen;
-
-  let score = 0;
-  let highScore = 0;
-  let lives = config.initialLives;
-  let comboCount = 0;
-  let comboTimer = 0;
-  let shieldTime = 0;
-  let shipCount = 1; // 1 or 2
-  let nextExtraShipScore = config.powerUps.extraShipScoreInterval;
-  let nextLargeMeteorScore = config.largeMeteor.spawnScoreInterval;
-  let currentEnemySpawnRate = config.enemies.spawnRateInitial;
-  let enemySpawnTimerId = null;
-  let lastShotFrame = 0;
-  let frameCount = 0; // Keep track of frames for time-based logic
-
-  let gameActive = false; // Is the game simulation running (not paused, not on start/game over)
-  let gameStarted = false; // Has the game loop been initiated?
-  let paused = false;
-
-  // Game Objects
-  const player = { x: 0, y: 0, size: config.player.size }; // Initial position set later
-  const bullets = [];
-  const enemies = [];
-  const particles = [];
-  const powerUps = [];
-  const extraShips = [];
-  const ambientParticles = [];
-
-  // Background Elements
-  const starLayers = { foreground: [], background: [] };
-  let nebulaActive = false;
-  let nebulaOpacity = 0;
-  let nebulaTimer = 0;
-  let shieldHue = 0;
-  let shieldRotation = 0;
-
-  // Audio Context
-  let audioContext;
-  let musicSourceNode; // To control background music gain
-
-  // ---- Utility Functions ----
-  function getRandom(min, max) {
-    return Math.random() * (max - min) + min;
-  }
-
-  function getRandomColor() {
-    const letters = '0123456789ABCDEF';
-    let color = '#';
-    for (let i = 0; i < 6; i++) {
-      color += letters[Math.floor(Math.random() * 16)];
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>FPS Target Shooter with Explosions</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      overflow: hidden;
+      font-family: 'Orbitron', sans-serif;
+      background: linear-gradient(to bottom, #0a0a2a, #1a1a4a);
+      color: white;
+      touch-action: none;
+      height: 100vh;
     }
-    return color;
-  }
+    canvas { position: absolute; top: 0; left: 0; display: block; }
+    canvas.webgl { z-index: 0; }
+    canvas#hud { z-index: 1; pointer-events: none; }
 
-  // Simple AABB Collision Check
-  function checkCollision(rect1, rect2) {
-      // Adjust rect coords to be top-left based for consistency if needed
-      // Assuming rect objects have x, y (center) and size (diameter/width)
-      const r1Half = rect1.size / 2;
-      const r2Half = rect2.size / 2;
-      return (
-          rect1.x - r1Half < rect2.x + r2Half &&
-          rect1.x + r1Half > rect2.x - r2Half &&
-          rect1.y - r1Half < rect2.y + r2Half &&
-          rect1.y + r1Half > rect2.y - r2Half
+    /* Original LOADING & START/OVER SCREENS Styles (some will be overridden or complemented by new CSS) */
+    #loading, #start-screen, #game-over {
+      position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%; display: none;
+      flex-direction: column; justify-content: center; align-items: center;
+      z-index: 10;
+      text-align: center;
+      background: rgba(0, 0, 20, 0.95);
+    }
+    #loading { display: flex; } /* This will be styled further by new CSS */
+    
+    #start-screen { display: none; } /* Initially hidden, shown after loading */
+    h1, h2 { text-shadow: 0 0 15px currentColor; }
+    #start-screen h1 { 
+      font-size: 4rem; 
+      color: #00ffcc; 
+      margin-bottom:2rem;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      background: linear-gradient(to right, #00ffcc, #0066ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    #start-button, #restart-button {
+      background: #0066ff; color: #fff; border:none;
+      padding:15px 40px; font-size:1.5rem; border-radius:30px;
+      cursor:pointer; letter-spacing:2px; text-transform:uppercase;
+      box-shadow:0 0 15px #0066ff; transition:all .3s;
+      font-family: 'Orbitron', sans-serif;
+      margin: 20px 0;
+      position: relative;
+      overflow: hidden;
+    }
+    #start-button:hover, #restart-button:hover {
+      transform: scale(1.1); box-shadow:0 0 25px #00ffcc;
+      background: #00aaff;
+    }
+    #start-button:before, #restart-button:before {
+      content: '';
+      position: absolute;
+      top: -10px; left: -10px;
+      right: -10px; bottom: -10px;
+      background: linear-gradient(45deg, #00ffcc, #0066ff, #00ffcc);
+      z-index: -1;
+      filter: blur(10px);
+      opacity: 0.7;
+      animation: border-pulse 3s infinite linear;
+    }
+    @keyframes border-pulse {
+      0% { transform: scale(1); opacity: 0.7; }
+      50% { transform: scale(1.05); opacity: 0.9; }
+      100% { transform: scale(1); opacity: 0.7; }
+    }
+
+    #game-over { display:none; }
+    #game-over h2 { 
+      font-size:5rem; 
+      color:#ff0066; 
+      margin-bottom:2rem;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+    #final-score { 
+      font-size:2.5rem; 
+      color:#00ffcc; 
+      margin-bottom:3rem;
+      text-shadow: 0 0 10px #00ffcc;
+    }
+    #instructions { 
+      position:absolute; 
+      bottom:20px; 
+      color:#aaa; 
+      font-size:1rem; 
+      text-align:center; 
+      width:100%; 
+      max-width:500px; 
+      padding:0 20px;
+      line-height: 1.6;
+    }
+    #instructions p { 
+      margin-top: 0.5em; 
+      background: rgba(0, 102, 255, 0.2);
+      padding: 8px 15px;
+      border-radius: 15px;
+      border: 1px solid #00aaff;
+    }
+    
+    #mobile-controls {
+      position: fixed; bottom: 20px; width: 100%; display: none; 
+      justify-content: space-between; padding: 0 20px; z-index: 2;
+    }
+    .mobile-btn {
+      width: 80px; height: 80px; border-radius: 50%;
+      background: rgba(0, 102, 255, 0.3); border: 2px solid #00ccff;
+      color: white; display: flex; justify-content: center; align-items: center;
+      font-size: 1.2rem; user-select: none; -webkit-user-select: none;
+      touch-action: manipulation; box-shadow: 0 0 15px rgba(0, 204, 255, 0.5);
+      transition: all 0.2s;
+    }
+    .mobile-btn:active { transform: scale(0.9); background: rgba(0, 204, 255, 0.5); }
+    
+    #level-up {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%) scale(1); 
+      font-size: 3rem; color: #ff00ff; text-shadow: 0 0 20px #ff00ff;
+      z-index: 20; opacity: 0; transition: opacity 0.5s, transform 0.5s;
+      pointer-events: none; font-weight: bold; text-transform: uppercase;
+    }
+    
+    #combo-display {
+      position: fixed; top: 30%; left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 2.5rem; color: #ff00ff; text-shadow: 0 0 15px #ff00ff;
+      z-index: 20; opacity: 0; transition: opacity 0.3s, transform 0.3s;
+      pointer-events: none; font-weight: bold;
+    }
+
+    /* CSS from deepseek_css_20250621_21b96f.css (Loading Screen Enhancements) */
+    #loading h1 { /* Overrides existing #loading h1 for new loading screen */
+      color: #00ffcc; 
+      text-shadow: 0 0 10px #00ffcc; 
+      margin-bottom: 2rem;
+      font-size: 2.5rem;
+      animation: pulse 1.5s infinite alternate;
+    }
+    @keyframes pulse { /* Already defined, kept for clarity */
+      from { transform: scale(1); }
+      to { transform: scale(1.05); text-shadow: 0 0 20px #00ffcc; }
+    }
+    .loading-content {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; height: 100%; padding: 20px; text-align: center;
+    }
+    .progress-container { width: 80%; max-width: 400px; margin: 30px 0; }
+    .progress-bar { /* Overrides/complements original .progress-bar if any */
+      height: 20px; background: rgba(0, 40, 80, 0.5);
+      border-radius: 10px; overflow: hidden; position: relative;
+      box-shadow: 0 0 10px rgba(0, 150, 255, 0.3);
+    }
+    .progress { /* Complements original .progress */
+      height: 100%; background: linear-gradient(90deg, #0066ff, #00ffcc);
+      width: 0%; transition: width 0.3s ease-out; position: relative; z-index: 1;
+    }
+    .progress-glow {
+      position: absolute; top: 0; left: 0; height: 100%; width: 100%;
+      background: linear-gradient(90deg, 
+        rgba(0, 200, 255, 0.4) 0%, 
+        rgba(0, 255, 200, 0.7) 50%, 
+        rgba(0, 200, 255, 0.4) 100%);
+      background-size: 200% 100%; animation: progress-glow 2s linear infinite;
+      opacity: 0.7;
+    }
+    @keyframes progress-glow {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    .loading-text {
+      margin-top: 10px; color: #00aaff; font-size: 14px;
+      text-shadow: 0 0 5px rgba(0, 170, 255, 0.5);
+    }
+    .hint {
+      position: absolute; bottom: 30px; color: rgba(255, 255, 255, 0.6);
+      font-size: 12px; animation: pulse 2s infinite; /* Uses existing pulse animation */
+    }
+
+    /* CSS for Orientation Warning (from deepseek_javascript_20250621_d7b310.js) */
+    #orientation-warning {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.95); z-index: 1000; /* High z-index */
+      display: none; justify-content: center; align-items: center;
+      font-size: 1.8rem; color: #ff5555; text-align: center; padding: 20px;
+    }
+        
+    @media (max-width: 768px) {
+      #mobile-controls { display: flex; }
+      #instructions { bottom: 120px; }
+      #start-screen h1 { font-size: 2.5rem; }
+      #game-over h2 { font-size: 3rem; }
+      #final-score { font-size: 2rem; }
+      #start-button, #restart-button { padding: 12px 30px; font-size: 1.2rem; }
+      #level-up { font-size: 2rem; }
+      #combo-display { font-size: 1.8rem; }
+      #orientation-warning { font-size: 1.5rem; } /* Responsive font for warning */
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+</head>
+<body>
+  <!-- Replaced loading div (from deepseek_html_20250621_a3137d.html) -->
+  <div id="loading">
+    <div class="loading-content">
+      <h1>EXPLOSIVE TARGET SHOOTER</h1>
+      <div class="progress-container">
+        <div class="progress-bar">
+          <div class="progress" id="progress"></div>
+          <div class="progress-glow"></div>
+        </div>
+        <div class="loading-text" id="loading-text">LOADING ASSETS...</div>
+      </div>
+      <div class="hint">TAP START MISSION TO ENTER FULLSCREEN</div>
+    </div>
+  </div>
+
+  <div id="start-screen">
+    <h1>EXPLOSIVE TARGET SHOOTER</h1>
+    <button id="start-button">START MISSION</button>
+    <div id="instructions">
+      <p>CLICK & DRAG or A/D KEYS to Strafe</p>
+      <p>TAP CENTER to Shoot | DOUBLE-CLICK to Reload</p>
+      <p>SHOOT RED ENEMIES • AVOID GREEN POWER-UPS</p>
+      <p>WATCH TARGETS EXPLODE ON HIT!</p>
+    </div>
+  </div>
+
+  <div id="game-over">
+    <h2>MISSION FAILED</h2>
+    <div id="final-score">SCORE: 0</div>
+    <button id="restart-button">TRY AGAIN</button>
+  </div>
+
+  <div id="level-up">LEVEL UP!</div>
+  <div id="combo-display">COMBO x0</div>
+  
+  <div id="mobile-controls">
+    <div class="mobile-btn" id="left-btn">←</div>
+    <div class="mobile-btn" id="shoot-btn">FIRE</div>
+    <div class="mobile-btn" id="right-btn">→</div>
+  </div>
+
+  <!-- Added Orientation Warning div -->
+  <div id="orientation-warning">
+    <div>Please rotate your device to landscape mode to play.</div>
+  </div>
+
+  <canvas id="hud"></canvas>
+
+  <script>
+  let targets = [];
+  let projectiles = [];
+  let explosions = [];
+  let gameRunningGlobal = false; // Global flag for orientation handling
+  let animateLights = () => {}; // Placeholder for tunnel light animation
+
+  // New generateEnemySpriteSheet (from deepseek_javascript_20250621_a4ba2f.js)
+  function generateEnemySpriteSheet() {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const cols = 8; // More frames
+    const frameWidth = 256; // Higher resolution
+    const frameHeight = 256;
+    
+    canvas.width = frameWidth * cols;
+    canvas.height = frameHeight;
+    
+    const gradient = ctx.createRadialGradient(
+      frameWidth/2, frameHeight/2, frameWidth/4,
+      frameWidth/2, frameHeight/2, frameWidth/2.5
+    );
+    gradient.addColorStop(0, 'rgba(255,50,50,0.8)');
+    gradient.addColorStop(0.7, 'rgba(200,0,0,0.5)');
+    gradient.addColorStop(1, 'rgba(100,0,0,0)');
+
+    for (let i = 0; i < cols; i++) {
+      const x = i * frameWidth;
+      const pulse = Math.sin(i/cols * Math.PI * 2) * 0.3 + 0.7; // Sine pulse for size
+      
+      ctx.fillStyle = gradient; // Outer glow
+      ctx.beginPath();
+      ctx.arc(x + frameWidth/2, frameHeight/2, frameWidth/2.5, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.fillStyle = `rgba(255,${50*pulse},${50*pulse},0.9)`; // Main body with color pulse
+      ctx.beginPath();
+      ctx.arc(x + frameWidth/2, frameHeight/2, frameWidth/3 * pulse, 0, Math.PI * 2);
+      ctx.fill();
+      
+      const coreGrad = ctx.createRadialGradient(
+        x + frameWidth/2, frameHeight/2, 0,
+        x + frameWidth/2, frameHeight/2, frameWidth/6
       );
-  }
-
-   // ---- Asset Manager ----
-   const assetManager = {
-    assetsLoaded: 0,
-    totalAssets: Object.keys(assets).length,
-
-    loadAssets(callback) {
-        console.log("Loading assets...");
-        for (const key in assets) {
-            const asset = assets[key];
-            if (asset.src.endsWith('.png')) {
-                asset.image = new Image();
-                asset.image.onload = () => this.assetLoaded(key, callback);
-                asset.image.onerror = () => this.assetError(key);
-                asset.image.src = asset.src;
-            } else if (asset.src.endsWith('.mp3')) {
-                asset.audio = new Audio();
-                asset.audio.addEventListener('canplaythrough', () => this.assetLoaded(key, callback), { once: true });
-                asset.audio.onerror = () => this.assetError(key);
-                asset.audio.src = asset.src;
-                if (asset.loop) asset.audio.loop = true;
-                if (asset.volume !== undefined) asset.audio.volume = asset.volume;
-                asset.audio.load(); // Important for preloading
-            }
-        }
-    },
-
-    assetLoaded(key, callback) {
-        this.assetsLoaded++;
-        console.log(`Loaded: ${key} (${this.assetsLoaded}/${this.totalAssets})`);
-        if (this.assetsLoaded === this.totalAssets) {
-            console.log("All assets loaded.");
-            callback();
-        }
-    },
-
-    assetError(key) {
-        console.error(`Failed to load asset: ${key}`);
-        // Optionally handle loading errors, e.g., show an error message
-        // For simplicity, we'll increment loaded count anyway to not block forever
-        this.assetsLoaded++;
-         if (this.assetsLoaded === this.totalAssets) {
-             console.warn("Finished loading assets with errors.");
-             // callback(); // Decide if game can start with missing assets
-         }
-    },
-
-    getSpriteSheet() {
-        return assets.spritesheet.image;
-    },
-
-    playSound(key) {
-        const audio = assets[key]?.audio;
-        if (audio) {
-            audio.currentTime = 0; // Rewind to start
-            audio.play().catch(e => console.warn(`Audio play failed for ${key}: ${e.message}`));
-        }
-    },
-
-    playMusic() {
-        const music = assets.backgroundMusic?.audio;
-        if (music && music.paused) {
-             // Ensure AudioContext is resumed (required by some browsers)
-            if (!audioContext) {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            }
-             if (audioContext.state === 'suspended') {
-                audioContext.resume();
-            }
-
-            music.play().catch(e => console.warn(`Background music play failed: ${e.message}`));
-        }
-    },
-
-    stopMusic() {
-         const music = assets.backgroundMusic?.audio;
-         if (music) {
-             music.pause();
-             music.currentTime = 0;
-         }
+      coreGrad.addColorStop(0, 'rgba(255,255,255,0.9)');
+      coreGrad.addColorStop(1, 'rgba(200,200,255,0.5)');
+      
+      ctx.fillStyle = coreGrad; // Core
+      ctx.beginPath();
+      ctx.arc(x + frameWidth/2, frameHeight/2, frameWidth/6, 0, Math.PI * 2);
+      ctx.fill();
     }
-  };
-
-  // ---- Canvas & UI Setup ----
-  function setupCanvas() {
-    canvas = document.getElementById('gameCanvas');
-    ctx = canvas.getContext('2d');
-    setCanvasSize();
-    window.addEventListener('resize', setCanvasSize);
+    return canvas.toDataURL('image/png');
   }
-
-  function setCanvasSize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    // Recalculate player start position if needed
-    if (!gameActive && !gameStarted) { // Only set initial if not playing
-         player.x = canvas.width / 2;
-         player.y = canvas.height - 100; // Adjust fixed distance from bottom
-    }
-  }
-
-  function setupUI() {
-    scoreElement = document.getElementById('score');
-    highScoreElement = document.getElementById('highScore');
-    livesElement = document.getElementById('lives');
-    comboElement = document.getElementById('combo');
-    startScreen = document.getElementById('startScreen');
-    startMessage = document.getElementById('startMessage');
-    pauseScreen = document.getElementById('pauseScreen');
-
-    highScore = localStorage.getItem('highScore') || 0;
-    updateScoreboard();
-
-    startMessage.addEventListener('click', handleStartClick);
-
-    // Add touch controls
-    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-    canvas.addEventListener('touchend', handleTouchEnd); // Could potentially trigger shot on tap end
-
-     // Mouse controls
-    canvas.addEventListener('mousemove', handleMouseMove);
-    canvas.addEventListener('click', handleMouseClick);
-
-    // Pause key
-    document.addEventListener('keydown', handleKeyDown);
-  }
-
-  function updateScoreboard() {
-      scoreElement.textContent = score;
-      highScoreElement.textContent = highScore;
-      livesElement.textContent = lives;
-      comboElement.textContent = comboCount;
-  }
-
-  // ---- Input Handlers ----
-  function handleStartClick() {
-      if (assetManager.assetsLoaded === assetManager.totalAssets) {
-          startScreen.style.display = 'none';
-          startGame();
-      }
-  }
-
-  function handleMouseMove(e) {
-      if (!gameActive || paused) return;
-      player.x = e.clientX;
-      player.y = e.clientY; // Direct follow
-  }
-
-  function handleMouseClick() {
-      if (!gameStarted || paused) return; // Don't shoot if not started or paused
-       // Allow shooting via click even if start screen was just hidden
-       if (startScreen.style.display === 'none') {
-            shootBullet();
-       }
-       // Ensure music starts on first interaction
-       assetManager.playMusic();
-  }
-
-  function handleTouchStart(e) {
-      if (!gameStarted) return; // Don't respond before game starts
-      e.preventDefault(); // Prevent scrolling/zooming
-      assetManager.playMusic(); // Ensure music starts on first interaction
-      if (paused) return;
-
-      // Treat first touch point like mouse cursor
-      if (e.touches.length > 0) {
-          const touch = e.touches[0];
-          player.x = touch.clientX;
-          player.y = touch.clientY;
-          // Consider shooting on initial tap? Or require a separate tap?
-          // shootBullet(); // Example: shoot on tap start
-      }
-  }
-
-  function handleTouchMove(e) {
-      if (!gameActive || paused) return;
-      e.preventDefault(); // Prevent scrolling/zooming
-      if (e.touches.length > 0) {
-          const touch = e.touches[0];
-          player.x = touch.clientX;
-          player.y = touch.clientY;
-      }
-  }
-
-   function handleTouchEnd(e) {
-       if (!gameStarted || paused) return;
-       // If no touches remain, could potentially stop shooting or other actions
-       // Shoot on tap release (if it wasn't a drag) - more complex logic needed
-       // For simplicity, we'll rely on explicit tap/click for shooting for now
-       // Simple tap-to-shoot: check if duration was short and no movement
-       // Alternative: Add an on-screen shoot button
-       shootBullet(); // Shoot on lifting finger (simple tap detection)
-   }
-
-
-  function handleKeyDown(e) {
-    if (e.key.toLowerCase() === 'p' && gameStarted) {
-      togglePause();
-    }
-  }
-
-  function togglePause() {
-      paused = !paused;
-      pauseScreen.style.display = paused ? "flex" : "none";
-      if (paused) {
-          // Optionally pause music or reduce volume
-          assets.backgroundMusic?.audio?.pause();
-          if (enemySpawnTimerId) clearTimeout(enemySpawnTimerId); // Stop new spawns
-      } else {
-          // Resume music
-          assetManager.playMusic();
-          // Reschedule enemy spawn immediately if game is active
-          if(gameActive) scheduleEnemySpawn(100); // Respawn quickly after unpause
-          // Resume game loop implicitly via requestAnimationFrame
-      }
-  }
-
-  // ---- Background Effects ----
-  function initStarLayers() {
-    starLayers.foreground = [];
-    starLayers.background = [];
-    for (let i = 0; i < config.starfield.foregroundStars; i++) {
-      starLayers.foreground.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        radius: getRandom(0.5, 1.5),
-        speed: getRandom(config.starfield.fgSpeedMin, config.starfield.fgSpeedMax)
+  
+  function createExplosion(x, y, z) { /* Remains as in base index.html */
+    const explosion = {
+      particles: [], position: new THREE.Vector3(x, y, z), timer: 30, active: true
+    };
+    const colors = [0xff0000, 0xff6600, 0xffff00, 0xffffff];
+    for (let i = 0; i < 20; i++) {
+      const particleGeom = new THREE.SphereGeometry(0.15, 6, 6);
+      const particleMat = new THREE.MeshBasicMaterial({
+        color: colors[Math.floor(Math.random() * colors.length)], transparent: true, opacity: 1.0
       });
-    }
-    for (let i = 0; i < config.starfield.backgroundStars; i++) {
-      starLayers.background.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        radius: getRandom(1, 2.5),
-        speed: getRandom(config.starfield.bgSpeedMin, config.starfield.bgSpeedMax)
-      });
-    }
-  }
-
-  function updateStarLayers() {
-    for (const layerName in starLayers) {
-      for (const star of starLayers[layerName]) {
-        star.y += star.speed;
-        if (star.y > canvas.height + star.radius * 2) { // Reset slightly below screen
-          star.y = -star.radius * 2;
-          star.x = Math.random() * canvas.width;
-        }
-      }
-    }
-  }
-
-  function drawStarLayers() {
-    ctx.fillStyle = "#fff";
-    for (const layerName in starLayers) {
-      for (const star of starLayers[layerName]) {
-        ctx.beginPath();
-        ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  }
-
-  function updateNebula() {
-    if (!nebulaActive && Math.random() < config.nebula.spawnChance) {
-      nebulaActive = true;
-      nebulaOpacity = 0;
-      nebulaTimer = config.nebula.duration;
-    }
-    if (nebulaActive) {
-      if (nebulaTimer > 0) {
-        nebulaOpacity = Math.min(nebulaOpacity + config.nebula.fadeInSpeed, config.nebula.maxOpacity);
-        nebulaTimer--;
-      } else {
-        nebulaOpacity -= config.nebula.fadeOutSpeed;
-        if (nebulaOpacity <= 0) {
-          nebulaOpacity = 0;
-          nebulaActive = false;
-        }
-      }
-    }
-  }
-
-  function drawNebula() {
-    if (nebulaOpacity > 0) {
-      // Simple purple nebula, could be enhanced with noise/gradients
-      ctx.fillStyle = `rgba(100, 0, 128, ${nebulaOpacity})`;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
-  }
-
-  // ---- Player & Bullets ----
-  function shootBullet() {
-      // Cooldown check
-      if (frameCount < lastShotFrame + config.player.shootCooldown) {
-          return;
-      }
-      lastShotFrame = frameCount;
-
-      assetManager.playSound('shootSound');
-      const bulletCommon = {
-          width: config.bullets.width,
-          height: config.bullets.height,
-          speed: config.bullets.speed,
-          transformed: false,
-          transformationTimer: 0,
-          hasBounced: false // For large meteor interaction
+      const particle = new THREE.Mesh(particleGeom, particleMat);
+      particle.position.set(x, y, z);
+      particle.userData = {
+        velocity: new THREE.Vector3((Math.random() - 0.5), (Math.random() - 0.5), (Math.random() - 0.5))
+                  .normalize().multiplyScalar(Math.random() * 0.15 + 0.05),
       };
-
-      if (shipCount === 1) {
-          bullets.push({ ...bulletCommon, x: player.x, y: player.y - player.size / 2 });
-      } else if (shipCount === 2) {
-          const offset = player.size * 0.7; // Adjust spacing
-          bullets.push({ ...bulletCommon, x: player.x - offset, y: player.y });
-          bullets.push({ ...bulletCommon, x: player.x + offset, y: player.y });
-      }
+      explosion.particles.push(particle);
+    }
+    return explosion;
   }
 
-  function updateBullets() {
-      for (let i = bullets.length - 1; i >= 0; i--) {
-          const bullet = bullets[i];
-          bullet.y -= bullet.speed; // Speed can be negative if bounced
-
-          if (bullet.transformed) {
-              bullet.transformationTimer--;
-              if (bullet.transformationTimer <= 0) {
-                  bullets.splice(i, 1);
-                  continue;
-              }
-          }
-
-          // Remove bullets going off screen
-          if (bullet.y < -bullet.height || bullet.y > canvas.height + bullet.height) {
-              bullets.splice(i, 1);
-          }
+  // Orientation Handling (from deepseek_javascript_20250621_d7b310.js)
+  function handleOrientation() {
+    const orientationWarningEl = document.getElementById('orientation-warning');
+    if (!orientationWarningEl) return;
+    const isPortrait = window.innerHeight > window.innerWidth;
+    
+    if (isPortrait) {
+      orientationWarningEl.style.display = 'flex';
+      gameRunningGlobal = false; // Use the global flag to pause the game logic
+    } else {
+      orientationWarningEl.style.display = 'none';
+      // If the game was paused by orientation and now it's landscape,
+      // and the start screen is hidden (meaning game was active or intended to be)
+      // we can set gameRunningGlobal to true. The animation loop will pick it up.
+      // This doesn't re-call initGame, just allows the loop to resume game logic.
+      if (!gameRunningGlobal && window.renderer && !document.getElementById('start-screen').style.display.includes('flex')) {
+         // Check if a game was actually initialized (renderer exists)
+         // and start screen is not visible (meaning game was in progress or past start screen)
+         gameRunningGlobal = true;
       }
+    }
   }
 
-  function drawBullets() {
-      bullets.forEach(b => {
-          if (b.transformed) {
-              // Draw transformed (bounced) bullet - simple orange circles
-              ctx.fillStyle = config.bullets.transformedColor;
-              ctx.beginPath();
-              ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
-              ctx.fill();
-              // Add some trail effect maybe?
-              ctx.beginPath();
-              ctx.arc(b.x + getRandom(-2, 2), b.y + getRandom(1, 4), 1.5, 0, Math.PI * 2);
-              ctx.fill();
-          } else {
-              // Draw regular bullet
-              ctx.fillStyle = config.bullets.color;
-              ctx.fillRect(b.x - b.width / 2, b.y - b.height / 2, b.width, b.height);
-          }
+  document.addEventListener('DOMContentLoaded', () => {
+    const loading   = document.getElementById('loading');
+    const progress  = document.getElementById('progress');
+    const loadingText = document.getElementById('loading-text'); // For new loading screen
+    const startScr  = document.getElementById('start-screen');
+    const gameOver  = document.getElementById('game-over');
+    const startBtn  = document.getElementById('start-button');
+    const restartBtn= document.getElementById('restart-button');
+
+    // Fullscreen on Start (from deepseek_javascript_20250621_bdcfb1.js)
+    const startFullscreen = () => {
+      const elem = document.documentElement;
+      if (elem.requestFullscreen) {
+        elem.requestFullscreen().catch(e => console.warn("Fullscreen request failed:", e));
+      } else if (elem.webkitRequestFullscreen) { /* Safari */
+        elem.webkitRequestFullscreen();
+      } else if (elem.msRequestFullscreen) { /* IE11 */
+        elem.msRequestFullscreen();
+      }
+    };
+
+    let p=0, iv = setInterval(()=>{
+      p += Math.random()*12;
+      if (loadingText) loadingText.textContent = `LOADING ASSETS... ${Math.min(100, Math.round(p))}%`;
+      if(p>=100){ p=100; clearInterval(iv);
+        setTimeout(()=>{
+          loading.style.opacity='0';
+          setTimeout(()=>{
+            loading.style.display='none';
+            if (startScr) startScr.style.display='flex'; // Check if startScr exists
+          },600); 
+        },300);
+      }
+      if (progress) progress.style.width = Math.min(100,p)+'%'; // Ensure progress doesn't exceed 100% visually
+    },150); 
+
+    if (startBtn) {
+        startBtn.onclick = () => {
+          if (startScr) startScr.style.display = 'none';
+          startFullscreen();
+          setTimeout(initGame, 100); // Small delay
+        };
+    }
+    if (restartBtn) {
+        restartBtn.onclick = ()=>{ if (gameOver) gameOver.style.display='none'; initGame(); }
+    }
+    
+    window.showGameOver = () => {
+        const finalScoreEl = document.getElementById('final-score');
+        if (finalScoreEl) finalScoreEl.textContent = `SCORE: ${window.finalScore || 0}`;
+        if (gameOver) gameOver.style.display='flex';
+    };
+
+    // Initial orientation check and listeners
+    handleOrientation();
+    window.addEventListener('resize', handleOrientation);
+    window.addEventListener('orientationchange', handleOrientation);
+  });
+
+  // New Tunnel Effect (from deepseek_javascript_20250621_d15e36.js)
+  // Needs access to 'scene' and 'THREE' from initGame scope. So, define it inside initGame or pass scene.
+  // For simplicity, it will be defined inside initGame.
+
+  function initGame(){
+    let scene = new THREE.Scene(); // scene is local to initGame
+
+    // Function createTunnel (defined inside initGame to access its 'scene')
+    function createTunnel() {
+      const tunnelGeometry = new THREE.CylinderGeometry(50, 50, 300, 64, 1, true);
+      const tunnelTextureLoader = new THREE.TextureLoader(); // Use the game's main textureLoader if preferred
+      const tunnelTexture = tunnelTextureLoader.load('tunnel_texture.jpg', 
+        undefined, // onLoad
+        undefined, // onProgress
+        (err) => { console.warn("Tunnel texture not found or failed to load.", err)} // onError
+      );
+      tunnelTexture.wrapS = THREE.RepeatWrapping;
+      tunnelTexture.wrapT = THREE.RepeatWrapping;
+      tunnelTexture.repeat.set(8, 1);
+      
+      const tunnelMaterial = new THREE.MeshPhongMaterial({
+        map: tunnelTexture, transparent: true, opacity: 0.8, side: THREE.BackSide,
+        specular: 0x222222, shininess: 30
       });
-  }
+      
+      const tunnelMesh = new THREE.Mesh(tunnelGeometry, tunnelMaterial);
+      tunnelMesh.position.z = -150;
+      scene.add(tunnelMesh);
+
+      const light1 = new THREE.PointLight(0x0066ff, 2, 100);
+      light1.position.set(15, 5, -50); scene.add(light1);
+      const light2 = new THREE.PointLight(0xff6600, 2, 100);
+      light2.position.set(-15, 5, -80); scene.add(light2);
+
+      return function animateTunnelLights(time) { // Return the animation function
+        light1.intensity = 1.5 + Math.sin(time * 0.002) * 0.5;
+        light2.intensity = 1.5 + Math.cos(time * 0.003) * 0.5;
+        light1.position.z = -50 + Math.sin(time * 0.001) * 20;
+        light2.position.z = -80 + Math.cos(time * 0.0015) * 20;
+      };
+    }
 
 
-  // ---- Particles ----
-  function createExplosion(x, y, count = config.particles.count, pSpeed = config.particles.speed, pLife = config.particles.life) {
-      for (let i = 0; i < count; i++) {
-          particles.push({
-              x: x,
-              y: y,
-              vx: (Math.random() - 0.5) * pSpeed * getRandom(0.5, 1.5),
-              vy: (Math.random() - 0.5) * pSpeed * getRandom(0.5, 1.5),
-              radius: getRandom(config.particles.radiusMin, config.particles.radiusMax),
-              life: pLife * getRandom(0.8, 1.2), // Vary life slightly
-              color: getRandomColor()
-          });
-      }
-  }
-
-   function createBulletParticles(x, y, count = 5) {
-      for (let i = 0; i < count; i++) {
-          particles.push({
-              x: x,
-              y: y,
-              vx: (Math.random() - 0.5) * 2,
-              vy: (Math.random() - 0.5) * 2,
-              radius: 1.5,
-              life: config.bullets.bounceLife, // Match bounce life
-              color: config.bullets.transformedColor
-          });
-      }
-  }
-
-  function createAmbientParticle() {
-      if (Math.random() > config.ambientParticles.spawnChance) return;
-      // Spawn near the player, slightly behind
-      const spawnX = player.x + getRandom(-player.size / 2, player.size / 2);
-      const spawnY = player.y + player.size / 3;
-      ambientParticles.push({
-        x: spawnX,
-        y: spawnY,
-        vx: (Math.random() - 0.5) * (config.ambientParticles.speed / 2), // Less horizontal drift
-        vy: Math.random() * config.ambientParticles.speed + 0.5, // Move downwards
-        radius: getRandom(config.ambientParticles.radiusMin, config.ambientParticles.radiusMax),
-        life: config.ambientParticles.life,
-        color: getRandomColor()
+    if(window.renderer){ /* Cleanup logic remains largely the same */
+      cancelAnimationFrame(window.animId);
+      if (window.renderer.domElement.parentNode) document.body.removeChild(window.renderer.domElement);
+      targets.forEach(t => { 
+          if (t.userData && t.userData.animInterval) { clearInterval(t.userData.animInterval); t.userData.animInterval = null; }
+          if (t.geometry) t.geometry.dispose();
+          if (t.material) { if (t.material.map) t.material.map.dispose(); t.material.dispose(); }
       });
-  }
+      projectiles.forEach(p => {
+          if (p.geometry) p.geometry.dispose(); if (p.material) p.material.dispose();
+      });
+      explosions.forEach(e => e.particles.forEach(particleMesh => {
+          if (particleMesh.parent) particleMesh.parent.remove(particleMesh);
+          if (particleMesh.geometry) particleMesh.geometry.dispose();
+          if (particleMesh.material) particleMesh.material.dispose();
+      }));
+      window.renderer.dispose();
+    }
 
-  function updateParticles(particleArray) {
-       for (let i = particleArray.length - 1; i >= 0; i--) {
-           const p = particleArray[i];
-           p.x += p.vx;
-           p.y += p.vy;
-           p.life--;
-           if (p.life <= 0) {
-               particleArray.splice(i, 1);
-           }
-       }
-   }
+    targets = []; projectiles = []; explosions = [];
+    gameRunningGlobal = true; // Set game to running state
 
-   function drawParticles(particleArray) {
-       for (const p of particleArray) {
-           ctx.fillStyle = p.color;
-           ctx.globalAlpha = Math.max(0, p.life / 60); // Fade out
-           ctx.beginPath();
-           ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-           ctx.fill();
-           ctx.globalAlpha = 1.0; // Reset alpha
-       }
-   }
+    scene.background = new THREE.Color(0x111133);
+    scene.fog = new THREE.FogExp2(0x111133, 0.02);
 
-  // ---- Enemies ----
-  function scheduleEnemySpawn(delay) {
-      if (!gameActive) return; // Don't spawn if game stopped
-       if (enemySpawnTimerId) clearTimeout(enemySpawnTimerId); // Clear existing timer
+    const camera   = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+    camera.position.set(0,2,5);
+    window.camera = camera; // Make camera globally accessible for resize
 
-       const currentDelay = delay !== undefined ? delay : currentEnemySpawnRate;
+    const renderer = new THREE.WebGLRenderer({ antialias:true, alpha: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.domElement.classList.add('webgl');
+    document.body.appendChild(renderer.domElement);
+    window.renderer = renderer; // Make renderer globally accessible for resize & cleanup
 
-      enemySpawnTimerId = setTimeout(() => {
-          if (gameActive && !paused) { // Check again in case state changed
-              spawnEnemy();
-              // Adjust spawn rate based on score for difficulty scaling
-              const scoreFactorReduction = Math.floor(score / config.enemies.spawnRateScoreFactor);
-              currentEnemySpawnRate = Math.max(
-                  config.enemies.minSpawnRate,
-                  config.enemies.spawnRateInitial - scoreFactorReduction
-              );
-               scheduleEnemySpawn(); // Schedule next one
-          }
-      }, currentDelay);
-  }
+    const hudCanvas = document.getElementById('hud');
+    hudCanvas.width  = innerWidth;
+    hudCanvas.height = innerHeight;
+    const ctx = hudCanvas.getContext('2d');
+    
+    let health = 100, score = 0, penalties = 0;
+    let ammo = 15, maxAmmo = 15;
+    let lane = 0; // Game logic controls lane based on camera.position.x
+    let lastSpawnTime = 0, spawnInterval = 2000;
+    let difficulty = 1;
+    let combo = 0, lastHitTime = 0;
+    let level = 1, scoreToNextLevel = 100;
+    let levelUpDisplayTime = 0;
+    let comboDisplayTime = 0;
 
-  function spawnEnemy() {
-    const size = config.enemies.size;
-    enemies.push({
-      x: Math.random() * (canvas.width - size) + size / 2, // Ensure within bounds
-      y: -size / 2, // Start off-screen top
-      size: size,
-      speed: config.enemies.speed * getRandom(0.9, 1.2), // Vary speed slightly
-      frame: 0,
-      exploded: false,
-      type: 'regular',
-      health: 1,
-      rotation: 0,
-      rotationSpeed: (Math.random() > 0.5 ? 1 : -1) * getRandom(config.enemies.rotationSpeedMin, config.enemies.rotationSpeedMax),
-      vx: 0, // Horizontal velocity for large meteors
+    const textureLoader = new THREE.TextureLoader();
+    const enemySpriteSheetDataUrl = generateEnemySpriteSheet();
+
+    scene.add(new THREE.AmbientLight(0x404040, 1.2));
+    const d1 = new THREE.DirectionalLight(0xffffff, 1);
+    d1.position.set(5,10,5); scene.add(d1);
+    // Tunnel lights are added by createTunnel()
+    
+    const muzzleFlash = new THREE.PointLight(0xffff00, 0, 10);
+    muzzleFlash.position.set(0,0,-0.5); // Position relative to camera front
+    camera.add(muzzleFlash);
+    if (!camera.parent) scene.add(camera); // Ensure camera is in scene if lights are parented to it
+
+    const grid = new THREE.GridHelper(300,60,0x00ff88,0x224444);
+    scene.add(grid);
+    
+    animateLights = createTunnel(); // Initialize new tunnel and get its animation function
+    
+    function createTarget(isEnemy) { /* Base logic with updated COLS for enemy */
+      const laneX = (Math.floor(Math.random() * 3) - 1) * 6;
+      const zPos = -(Math.random() * 40 + 60);
+    
+      if (!isEnemy) { /* Power-up remains same */
+        const geometry = new THREE.CylinderGeometry(1, 1, 2, 24);
+        const material = new THREE.MeshPhongMaterial({
+          color: 0x00ff00, emissive: 0x003300, shininess: 80, transparent: true, opacity: 0.7
+        });
+        const powerUpMesh = new THREE.Mesh(geometry, material);
+        powerUpMesh.position.set(laneX, 1, zPos);
+        powerUpMesh.userData = { type: 'powerup', hit: false, timer: 0 };
+        scene.add(powerUpMesh); targets.push(powerUpMesh);
+        return powerUpMesh;
+      } else { // Enemy
+        const geometry = new THREE.CylinderGeometry(1, 1, 3, 32, 1, true); 
+        const enemyMaterial = new THREE.MeshBasicMaterial({
+          transparent: true, opacity: 1.0, side: THREE.DoubleSide, depthWrite: true 
+        });
+        const enemyMesh = new THREE.Mesh(geometry, enemyMaterial);
+        enemyMesh.position.set(laneX, 1.5, zPos);
+        enemyMesh.userData = { type: 'enemy', hit: false, timer: 0, animInterval: null }; 
+        
+        textureLoader.load( enemySpriteSheetDataUrl,
+            function ( loadedRootTexture ) {
+                const textureForThisEnemy = loadedRootTexture.clone();
+                textureForThisEnemy.needsUpdate = true;
+                const COLS = 8; // MODIFIED: Use 8 columns for the new sprite sheet
+                const uW = 1 / COLS;
+                let currentFrame = Math.floor(Math.random() * COLS);
+                textureForThisEnemy.repeat.set(uW, 1);
+                textureForThisEnemy.offset.set(currentFrame * uW, 0);
+                textureForThisEnemy.wrapS = THREE.ClampToEdgeWrapping;
+                textureForThisEnemy.wrapT = THREE.ClampToEdgeWrapping;
+        
+                if (enemyMesh.material) {
+                    enemyMesh.material.map = textureForThisEnemy;
+                    enemyMesh.material.needsUpdate = true;
+                    const animSpeed = 120; // Adjusted animation speed
+                    const iv = setInterval(() => {
+                        if (!enemyMesh || !enemyMesh.material || !enemyMesh.material.map || enemyMesh.userData.hit) {
+                            clearInterval(iv);
+                            if (enemyMesh.userData) enemyMesh.userData.animInterval = null;
+                            return;
+                        }
+                        currentFrame = (currentFrame + 1) % COLS;
+                        textureForThisEnemy.offset.x = currentFrame * uW;
+                    }, animSpeed);
+                    enemyMesh.userData.animInterval = iv;
+                } else { textureForThisEnemy.dispose(); }
+            },
+            undefined,
+            function ( err ) {
+                console.error( 'ERROR LOADING ENEMY TEXTURE:', err );
+                if (enemyMesh.material) {
+                    enemyMesh.material.map = null; enemyMesh.material.color.set(0xcc0000);
+                    enemyMesh.material.needsUpdate = true;
+                }
+            }
+        );
+        scene.add(enemyMesh); targets.push(enemyMesh);
+        return enemyMesh;
+      }
+    }
+
+    function createProjectile() { /* Remains as in base index.html */
+        const geometry = new THREE.SphereGeometry(0.2, 8, 8);
+        const material = new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.9 });
+        const projectile = new THREE.Mesh(geometry, material);
+        const projectileOffset = new THREE.Vector3(0, -0.2, -1);
+        projectileOffset.applyQuaternion(camera.quaternion);
+        projectile.position.copy(camera.position).add(projectileOffset);
+        scene.add(projectile); projectiles.push(projectile);
+        return projectile;
+    }
+
+    function trySpawnTarget(now){ /* Remains as in base index.html */
+        if(now - lastSpawnTime > spawnInterval){
+            createTarget(Math.random() < 0.7); lastSpawnTime = now;
+            spawnInterval = Math.max(700, spawnInterval * 0.985);
+        }
+    }
+    
+    // Input handling remains as in base index.html
+    let isDragging=false, dragStartX=0, cameraStartX=0;
+    renderer.domElement.addEventListener('pointerdown', e => {
+      if(e.button !== 0 || !gameRunningGlobal) return; 
+      isDragging = true; dragStartX = e.clientX; cameraStartX = camera.position.x;
+    }, { passive: false });
+    renderer.domElement.addEventListener('pointermove', e => {
+      if(!isDragging || !gameRunningGlobal) return;
+      const dx = e.clientX - dragStartX; const targetX = cameraStartX - dx * 0.035;
+      camera.position.x = THREE.MathUtils.clamp(targetX, -10, 10);
+      lane = Math.max(-1, Math.min(1, Math.round(camera.position.x / 6)));
+    }, { passive: false });
+    renderer.domElement.addEventListener('pointerup', e => {
+      if(e.button !== 0 || !gameRunningGlobal) return;
+      if(!isDragging && e.target === renderer.domElement) handleShoot();
+      isDragging = false;
     });
-  }
-
-  function spawnLargeMeteor() {
-      const size = config.enemies.size * config.largeMeteor.sizeMultiplier;
-      enemies.push({
-          x: Math.random() * (canvas.width - size) + size / 2,
-          y: -size / 2,
-          size: size,
-          speed: config.enemies.speed * 0.7, // Slower vertical speed
-          frame: 0,
-          exploded: false,
-          type: 'large',
-          health: config.largeMeteor.health,
-          rotation: 0,
-          rotationSpeed: (Math.random() > 0.5 ? 1 : -1) * getRandom(config.enemies.rotationSpeedMin * 0.5, config.enemies.rotationSpeedMax * 0.5), // Slower rotation
-          vx: 0,
-      });
-      nextLargeMeteorScore += config.largeMeteor.spawnScoreInterval;
-      console.log("Large Meteor Spawned!");
-  }
+    const leftBtn = document.getElementById('left-btn');
+    const rightBtn = document.getElementById('right-btn');
+    const shootBtn = document.getElementById('shoot-btn');
+    if(leftBtn) leftBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); if(gameRunningGlobal) lane = Math.max(-1, lane - 1); });
+    if(rightBtn) rightBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); if(gameRunningGlobal) lane = Math.min(1, lane + 1); });
+    if(shootBtn) shootBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); handleShoot(); });
+    window.addEventListener('keydown', e => {
+        if (!gameRunningGlobal) return;
+        if(e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') lane = Math.max(-1, lane - 1);
+        if(e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') lane = Math.min(1, lane + 1);
+        if(e.code === 'Space' || e.key.toLowerCase() === 'w' || e.key === 'Enter') { e.preventDefault(); handleShoot(); }
+        if(e.key.toLowerCase() === 'r') handleReload();
+    });
+    renderer.domElement.addEventListener('dblclick', (e) => {
+        if (e.target === renderer.domElement && gameRunningGlobal) handleReload();
+    });
 
 
-  function updateEnemies() {
-      for (let i = enemies.length - 1; i >= 0; i--) {
-          const enemy = enemies[i];
+    function showLevelUp() { /* Remains as in base index.html */
+      const levelUpEl = document.getElementById('level-up');
+      levelUpEl.textContent = `LEVEL ${level}!`;
+      levelUpEl.style.transform = 'translate(-50%, -50%) scale(0.5)';
+      levelUpEl.style.opacity = '1';
+      setTimeout(() => { levelUpEl.style.transform = 'translate(-50%, -50%) scale(1.2)'; }, 50);
+      setTimeout(() => { levelUpEl.style.transform = 'translate(-50%, -50%) scale(1)'; }, 400);
+      levelUpDisplayTime = performance.now();
+    }
+    function showCombo(comboValue) { /* Remains as in base index.html */
+      const comboEl = document.getElementById('combo-display');
+      comboEl.textContent = `COMBO x${comboValue}!`;
+      comboEl.style.transform = 'translate(-50%, -50%) scale(1.5)';
+      comboEl.style.opacity = '1';
+      setTimeout(() => { comboEl.style.transform = 'translate(-50%, -50%) scale(1)'; }, 50);
+      comboDisplayTime = performance.now();
+    }
 
-          if (enemy.exploded) {
-              // Handle explosion animation
-              enemy.frame++;
-              // Adjust explosion duration based on type? Currently uses fixed sprite frames.
-              if (enemy.frame >= sprites.asteroidExploding.length * 10) { // 10 frames per sprite
-                  enemies.splice(i, 1);
-              }
-              continue; // Skip movement and collision if exploding
-          }
-
-          // --- Movement ---
-          enemy.y += enemy.speed;
-          enemy.rotation += enemy.rotationSpeed;
-
-          if (enemy.type === "large") {
-              enemy.x += enemy.vx;
-              // Dampen horizontal velocity
-              enemy.vx *= 0.98;
-               // Wall bouncing for large meteor
-               const halfSize = enemy.size / 2;
-               if (enemy.x - halfSize < 0 || enemy.x + halfSize > canvas.width) {
-                   enemy.vx *= -0.8; // Reverse and dampen
-                   enemy.x = Math.max(halfSize, Math.min(canvas.width - halfSize, enemy.x)); // Clamp position
-               }
-          }
-
-          // Remove if off-screen bottom
-          if (enemy.y > canvas.height + enemy.size) {
-              enemies.splice(i, 1);
-              continue;
-          }
-
-          // --- Collision Detection ---
-
-          // Bullet-Enemy Collision
-          for (let j = bullets.length - 1; j >= 0; j--) {
-              const bullet = bullets[j];
-              if (checkCollision({ x: bullet.x, y: bullet.y, size: Math.max(bullet.width, bullet.height) }, enemy)) {
-                  handleBulletEnemyCollision(bullet, enemy, i, j);
-                  // If enemy was destroyed, break inner loop for this enemy
-                  if (enemy.exploded) break;
-              }
-          }
-
-          // Player-Enemy Collision (only if enemy not already exploding)
-          if (!enemy.exploded && checkPlayerEnemyCollision(enemy)) {
-              handlePlayerEnemyCollision(enemy, i);
-          }
+    function handleShoot() { /* Base logic with gameRunningGlobal */
+      if(!gameRunningGlobal || ammo <= 0) {
+        if (ammo <=0 && gameRunningGlobal) { 
+            const originalZ = camera.position.z;
+            // muzzleFlash.parent.localToWorld(muzzleFlash.position); // MuzzleFlash is child of camera
+            camera.position.z += 0.1; 
+            setTimeout(() => camera.position.z = originalZ, 80);
+        } 
+        return;
       }
-  }
+      ammo--;
+      muzzleFlash.intensity = 15; setTimeout(() => { muzzleFlash.intensity = 0; }, 60);
+      const projectile = createProjectile();
+      const direction = new THREE.Vector3(0,0,-1); direction.applyQuaternion(camera.quaternion);
+      projectile.userData = { velocity: direction.multiplyScalar(1.8), timer: 100 };
+    }
+    function handleReload() { /* Base logic with gameRunningGlobal */
+      if(ammo < maxAmmo && gameRunningGlobal) {
+        ammo = maxAmmo; const originalZ = camera.position.z; camera.position.z += 0.2; 
+        setTimeout(() => { camera.position.z = originalZ; }, 120);
+        const reloadFlash = new THREE.PointLight(0x0066ff, 8, 15);
+        reloadFlash.position.copy(camera.position); scene.add(reloadFlash);
+        setTimeout(() => { scene.remove(reloadFlash); reloadFlash.dispose(); }, 250);
+      }
+    }
+    
+    // New drawHUD function (from deepseek_javascript_20250621_6c64a6.js)
+    function drawHUD() {
+      ctx.clearRect(0,0,innerWidth,innerHeight);
+      if (!gameRunningGlobal && window.finalScore === undefined && !document.getElementById('game-over').style.display.includes('flex')) return;
+      
+      ctx.strokeStyle = 'rgba(0,255,255,0.8)'; ctx.lineWidth = 3;
+      const reticleSize = 20 + Math.sin(performance.now()/200)*3; const gap = 8;
+      ctx.beginPath(); ctx.arc(innerWidth/2, innerHeight/2, reticleSize*1.5, 0, Math.PI*2); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(innerWidth/2 - reticleSize - gap, innerHeight/2 - reticleSize - gap);
+      ctx.lineTo(innerWidth/2 - gap, innerHeight/2 - gap);
+      ctx.moveTo(innerWidth/2 + reticleSize + gap, innerHeight/2 - reticleSize - gap);
+      ctx.lineTo(innerWidth/2 + gap, innerHeight/2 - gap);
+      ctx.moveTo(innerWidth/2 - reticleSize - gap, innerHeight/2 + reticleSize + gap);
+      ctx.lineTo(innerWidth/2 - gap, innerHeight/2 + gap);
+      ctx.moveTo(innerWidth/2 + reticleSize + gap, innerHeight/2 + reticleSize + gap);
+      ctx.lineTo(innerWidth/2 + gap, innerHeight/2 + gap);
+      ctx.stroke();
+      
+      const panelWidth = 260; ctx.save();
+      ctx.fillStyle = 'rgba(0,20,40,0.6)'; ctx.strokeStyle = 'rgba(0,255,255,0.4)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.roundRect(20, 20, panelWidth, 150, [0, 15, 15, 0]); ctx.fill(); ctx.stroke();
+      
+      ctx.fillStyle = 'rgba(0,50,100,0.4)'; ctx.beginPath();
+      ctx.roundRect(30, 30, panelWidth-20, 25, 12); ctx.fill();
+      
+      const healthWidth = (panelWidth-20) * (health/100);
+      const healthGrad = ctx.createLinearGradient(30, 30, 30+healthWidth, 30);
+      healthGrad.addColorStop(0, '#00ff88'); healthGrad.addColorStop(1, '#0066ff');
+      ctx.fillStyle = healthGrad; ctx.beginPath();
+      ctx.roundRect(30, 30, Math.max(0, healthWidth), 25, 12); ctx.fill(); // Ensure healthWidth isn't negative
+      
+      ctx.font = 'bold 16px Orbitron'; ctx.fillStyle = '#ffffff';
+      ctx.fillText(`HEALTH: ${Math.floor(health)}%`, 40, 50);
+      ctx.font = 'bold 18px Orbitron'; ctx.fillStyle = '#00ffff';
+      ctx.fillText(`SCORE: ${score}`, 40, 80);
+      ctx.fillText(`LEVEL: ${level}`, 40, 110);
+      
+      ctx.fillStyle = ammo > maxAmmo/3 ? 'rgba(0,255,255,0.7)' : 'rgba(255,50,50,0.7)';
+      ctx.font = 'bold 20px Orbitron'; ctx.fillText(`AMMO: ${ammo}/${maxAmmo}`, 40, 140);
+      ctx.restore();
+    }
 
-  function handleBulletEnemyCollision(bullet, enemy, enemyIndex, bulletIndex) {
-      if (enemy.type === "large") {
-          if (!bullet.hasBounced) {
-              bullet.hasBounced = true;
-              bullet.speed = -bullet.speed * 0.8; // Bounce back, slower
-              bullet.transformed = true;
-              bullet.transformationTimer = config.bullets.bounceLife;
-              createBulletParticles(bullet.x, bullet.y, 5);
 
-              // Apply horizontal impulse based on impact side
-              const impactDir = (bullet.x < enemy.x) ? 1 : -1;
-              enemy.vx += impactDir * config.largeMeteor.bounceForce * getRandom(0.8, 1.2);
+    function doGameOver(){ /* Base logic with gameRunningGlobal */
+      gameRunningGlobal = false; window.finalScore = score;
+      setTimeout(() => window.showGameOver(), 500);
+    }
+    
+    let startTime = 0;
+    function animate(time){
+      window.animId = requestAnimationFrame(animate);
+      if (!startTime) startTime = time;
+      const now = performance.now();
+      
+      // Animate tunnel lights
+      if (typeof animateLights === 'function') animateLights(now);
 
-              // Apply damage
-              enemy.health--;
-              score += config.largeMeteor.pointsPerHit; // Points per hit
-              triggerCombo();
 
-              if (enemy.health <= 0) {
-                  assetManager.playSound('explosionSound');
-                  enemy.exploded = true;
-                  enemy.frame = 0; // Start explosion animation
-                   createExplosion(enemy.x, enemy.y, config.largeMeteor.explosionParticles); // More particles
-                   // Don't remove bullet, it bounced
-                   // Score already added per hit, maybe add bonus for destruction?
-                   score += 50; // Bonus points
-              }
-          } else {
-              // Bounced bullet hitting large meteor again - destroy bullet
-               bullets.splice(bulletIndex, 1);
-          }
-      } else { // Regular enemy
-          assetManager.playSound('explosionSound');
-          enemy.exploded = true;
-          enemy.frame = 0;
-          createExplosion(enemy.x, enemy.y);
-          bullets.splice(bulletIndex, 1); // Remove bullet
-
-          score += config.enemies.points * comboCount; // Apply combo multiplier
-          triggerCombo();
+      if(levelUpDisplayTime > 0 && now - levelUpDisplayTime > 2000) {
+        const el = document.getElementById('level-up'); if(el) el.style.opacity = '0'; 
+        levelUpDisplayTime = 0;
+      }
+      if(comboDisplayTime > 0 && now - comboDisplayTime > 1500) {
+        const el = document.getElementById('combo-display'); if(el) el.style.opacity = '0';
+        comboDisplayTime = 0;
       }
 
-      updateScoreboard();
-      checkHighScore();
-  }
+      if(gameRunningGlobal){ // Use global flag
+        difficulty = 1 + (now - startTime) / 60000;
+        const targetCameraX = lane * 6;
+        camera.position.x += (targetCameraX - camera.position.x) * 0.12;
 
-  function checkPlayerEnemyCollision(enemy) {
-       const playerHitbox = { x: player.x, y: player.y, size: player.size };
-       if (shipCount === 1) {
-           return checkCollision(playerHitbox, enemy);
-       } else { // Check both ships when shipCount is 2
-           const offset = player.size * 0.7;
-           const leftShipHitbox = { x: player.x - offset, y: player.y, size: player.size };
-           const rightShipHitbox = { x: player.x + offset, y: player.y, size: player.size };
-           return checkCollision(leftShipHitbox, enemy) || checkCollision(rightShipHitbox, enemy);
-       }
-   }
+        trySpawnTarget(now);
 
-  function handlePlayerEnemyCollision(enemy, enemyIndex) {
-      if (shieldTime > 0) {
-          // Shield active: Destroy enemy, get points, maybe visual feedback
-          assetManager.playSound('explosionSound'); // Or a different shield hit sound?
-          enemy.exploded = true;
-          enemy.frame = 0;
-          createExplosion(enemy.x, enemy.y, config.particles.count / 2, config.particles.speed * 0.5, config.particles.life / 2); // Smaller shield explosion
-          score += Math.floor(config.enemies.points / 2); // Fewer points for shield hit
-          updateScoreboard();
-          checkHighScore();
-          // Don't reset combo on shield hit
-      } else {
-          // No shield: Lose life or extra ship
-          createExplosion(player.x, player.y, 40, 6); // Player hit explosion
-
-          if (shipCount === 2) {
-              shipCount = 1;
-              // Add visual/audio feedback for losing ship
-               assetManager.playSound('explosionSound'); // Placeholder
-          } else {
-              lives--;
-               assetManager.playSound('explosionSound'); // Placeholder - player death sound?
-              updateScoreboard();
-              if (lives <= 0) {
-                  gameOver();
-                  return; // Stop further processing if game over
-              }
-          }
-          // Reset combo on hit
-          comboCount = 0;
-          comboTimer = 0;
-          updateScoreboard();
-
-          // Remove the enemy that hit the player
-          enemies.splice(enemyIndex, 1);
-           // Add brief invulnerability? (Optional)
-      }
-  }
-
-
-  function drawEnemies() {
-      enemies.forEach(enemy => {
-          ctx.save();
-          ctx.translate(enemy.x, enemy.y);
-          ctx.rotate(enemy.rotation);
-
-          let spriteData;
-          if (enemy.exploded) {
-              const frameIndex = Math.min(Math.floor(enemy.frame / 10), sprites.asteroidExploding.length - 1);
-              spriteData = sprites.asteroidExploding[frameIndex];
-          } else {
-              spriteData = sprites.asteroidIntact;
-          }
-
-          if (spriteData) {
-              ctx.drawImage(
-                  assetManager.getSpriteSheet(),
-                  spriteData.x, spriteData.y, spriteData.width, spriteData.height,
-                  -enemy.size / 2, -enemy.size / 2, enemy.size, enemy.size
-              );
-          }
-
-          ctx.restore();
-
-          // Optional: Draw health bar for large meteor
-          if (enemy.type === 'large' && !enemy.exploded && enemy.health < config.largeMeteor.health) {
-               const barWidth = enemy.size * 0.8;
-               const barHeight = 5;
-               const barX = enemy.x - barWidth / 2;
-               const barY = enemy.y + enemy.size / 2 + 5; // Below meteor
-               const healthPercent = enemy.health / config.largeMeteor.health;
-
-               ctx.fillStyle = '#555'; // Background
-               ctx.fillRect(barX, barY, barWidth, barHeight);
-               ctx.fillStyle = healthPercent > 0.5 ? '#0f0' : (healthPercent > 0.2 ? '#ff0' : '#f00'); // Color changes with health
-               ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
-               ctx.strokeStyle = '#fff';
-               ctx.strokeRect(barX, barY, barWidth, barHeight);
-          }
-      });
-  }
-
-
-  // ---- Power-Ups & Special Items ----
-  function spawnPowerUp() {
-      if (gameActive && !paused && Math.random() < config.powerUps.shieldSpawnChance) {
-          powerUps.push({
-              type: 'shield',
-              x: Math.random() * canvas.width,
-              y: -config.powerUps.shieldSize, // Start off-screen top
-              size: config.powerUps.shieldSize,
-              speed: config.powerUps.shieldSpeed
+        explosions = explosions.filter(explosion => { /* Base logic */
+          explosion.timer--;
+          explosion.particles.forEach(p_mesh => {
+            p_mesh.position.add(p_mesh.userData.velocity);
+            p_mesh.userData.velocity.multiplyScalar(0.93);
+            if (p_mesh.material.opacity !== undefined) p_mesh.material.opacity = Math.max(0, explosion.timer / 30);
           });
-      }
-  }
+          if (explosion.timer <= 0) {
+              explosion.particles.forEach(p_mesh => {
+                  if (p_mesh.parent) p_mesh.parent.remove(p_mesh);
+                  if (p_mesh.geometry) p_mesh.geometry.dispose();
+                  if (p_mesh.material) p_mesh.material.dispose();
+              }); return false;
+          } return true;
+        });
 
-  function spawnExtraShipPowerup() {
-      extraShips.push({
-          x: Math.random() * canvas.width,
-          y: -config.powerUps.extraShipSize,
-          size: config.powerUps.extraShipSize,
-          speed: config.powerUps.extraShipSpeed,
-          rotation: 0,
-          rotationSpeed: (Math.random() > 0.5 ? 1 : -1) * getRandom(config.powerUps.extraShipRotationSpeedMin, config.powerUps.extraShipRotationSpeedMax)
-      });
-      nextExtraShipScore += config.powerUps.extraShipScoreInterval;
-       console.log("Extra Ship Powerup Spawned!");
-  }
-
-  function updatePowerUps() {
-      // Update Shield Powerups
-      for (let i = powerUps.length - 1; i >= 0; i--) {
-          const pu = powerUps[i];
-          pu.y += pu.speed;
-
-          const playerHitbox = { x: player.x, y: player.y, size: player.size };
-          if (checkCollision(playerHitbox, pu)) {
-              if (pu.type === 'shield') {
-                  shieldTime = config.powerUps.shieldDuration;
-                  // Add sound/visual effect for pickup
-                   console.log("Shield acquired!");
-                   powerUps.splice(i, 1);
+        projectiles = projectiles.filter(p => { /* Base logic */
+          p.position.add(p.userData.velocity); p.userData.timer--;
+          const pBox = new THREE.Box3().setFromObject(p); let hitSomething = false;
+          for (let i = targets.length - 1; i >= 0; i--) {
+            const t = targets[i]; if (t.userData.hit) continue;
+            const tBox = new THREE.Box3().setFromObject(t);
+            if (pBox.intersectsBox(tBox)) {
+              t.userData.hit = true; t.userData.timer = 20;
+              const nowPerf = performance.now();
+              combo = (nowPerf - lastHitTime < 2000) ? combo + 1 : 1; lastHitTime = nowPerf;
+              if(t.userData.type === 'enemy') {
+                const explosionObj = createExplosion(t.position.x, t.position.y, t.position.z);
+                explosionObj.particles.forEach(particle => scene.add(particle)); explosions.push(explosionObj);
+                score += 10 + Math.floor(combo/3); if(combo > 2) showCombo(combo);
+                if(score >= scoreToNextLevel) {
+                  level++; scoreToNextLevel += level * 100; maxAmmo += 5; ammo = maxAmmo;
+                  health = Math.min(100, health + 30); showLevelUp();
+                }
+              } else if (t.userData.type === 'powerup') {
+                penalties++; health -= 10; combo = 0;
+                if (t.material && t.material.emissive) {
+                  t.material.color.setHex(0xffff00); t.material.emissive.setHex(0x888800);
+                }
               }
-          } else if (pu.y > canvas.height + pu.size) {
-              powerUps.splice(i, 1); // Remove if off-screen
+              hitSomething = true; break;
+            }
           }
-      }
+          if (hitSomething || p.userData.timer <= 0 || p.position.z < -100) {
+            scene.remove(p); p.geometry.dispose(); p.material.dispose(); return false;
+          } return true;
+        });
 
-      // Update Extra Ship Powerups
-      for (let i = extraShips.length - 1; i >= 0; i--) {
-          const es = extraShips[i];
-          es.y += es.speed;
-          es.rotation += es.rotationSpeed;
-
-          const playerHitbox = { x: player.x, y: player.y, size: player.size };
-          if (checkCollision(playerHitbox, es)) {
-              if (shipCount < 2) {
-                   shipCount = 2;
-                   // Add sound/visual effect
-                   console.log("Extra ship acquired!");
-              }
-              extraShips.splice(i, 1);
-          } else if (es.y > canvas.height + es.size) {
-              extraShips.splice(i, 1);
+        targets = targets.filter(t => { /* Base logic */
+          t.position.z += 0.1 * difficulty;
+          if (t.position.z > camera.position.z + 1) {
+            if(!t.userData.hit){
+              if(t.userData.type === 'enemy') { health -= 15; combo = 0; }
+              else if (t.userData.type === 'powerup') { score += 5; }
+            }
+            scene.remove(t); t.geometry.dispose(); 
+            if(t.material) { if(t.material.map) t.material.map.dispose(); t.material.dispose(); }
+            if (t.userData.animInterval) clearInterval(t.userData.animInterval);
+            return false;
           }
+          if(t.userData.hit){
+            if (t.material && t.material.opacity !== undefined) t.material.opacity = Math.max(0, (t.userData.timer / 20));
+            t.userData.timer--;
+            if(t.userData.timer <= 0) {
+              scene.remove(t); t.geometry.dispose(); 
+              if(t.material) { if(t.material.map) t.material.map.dispose(); t.material.dispose(); }
+              if (t.userData.animInterval) clearInterval(t.userData.animInterval); // Ensure cleared on final removal too
+              return false;
+            }
+          } return true;
+        });
+        if(health <= 0) { health = 0; doGameOver(); }
       }
-
-      // Check conditions to spawn powerups
-      spawnPowerUp(); // Shield has random chance per frame
-      if (gameActive && !paused && score >= nextExtraShipScore && shipCount < 2) {
-          spawnExtraShipPowerup();
-      }
-       if (gameActive && !paused && score >= nextLargeMeteorScore) {
-          spawnLargeMeteor();
-       }
-  }
-
-  function drawPowerUps() {
-      // Draw Shield Powerups
-      powerUps.forEach(pu => {
-          if (pu.type === 'shield') {
-              ctx.fillStyle = "rgba(0, 150, 255, 0.8)"; // Translucent blue
-              ctx.strokeStyle = "#fff";
-              ctx.lineWidth = 2;
-              ctx.beginPath();
-              ctx.arc(pu.x, pu.y, pu.size / 2, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.stroke();
-              // Add pulsating effect?
-               ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
-               ctx.font = "bold 12px Orbitron";
-               ctx.textAlign = "center";
-               ctx.textBaseline = "middle";
-               ctx.fillText("S", pu.x, pu.y);
-
-          }
-      });
-
-      // Draw Extra Ship Powerups
-      const shipSprite = sprites.spaceship;
-      extraShips.forEach(es => {
-          ctx.save();
-          ctx.translate(es.x, es.y);
-          ctx.rotate(es.rotation);
-          ctx.drawImage(
-              assetManager.getSpriteSheet(),
-              shipSprite.x, shipSprite.y, shipSprite.width, shipSprite.height,
-              -es.size / 2, -es.size / 2, es.size, es.size
-          );
-          ctx.restore();
-      });
-  }
-
-
-  // ---- Player Drawing & Effects ----
-   function drawPlayer() {
-        const shipSprite = sprites.spaceship;
-        if (!shipSprite || !assetManager.getSpriteSheet()) return; // Guard against missing assets
-
-        if (shipCount === 1) {
-            ctx.drawImage(
-                assetManager.getSpriteSheet(),
-                shipSprite.x, shipSprite.y, shipSprite.width, shipSprite.height,
-                player.x - player.size / 2, player.y - player.size / 2, player.size, player.size
-            );
-        } else if (shipCount === 2) {
-            const offset = player.size * 0.7; // Same offset as shooting
-            ctx.drawImage(
-                assetManager.getSpriteSheet(),
-                shipSprite.x, shipSprite.y, shipSprite.width, shipSprite.height,
-                player.x - offset - player.size / 2, player.y - player.size / 2, player.size, player.size
-            );
-            ctx.drawImage(
-                assetManager.getSpriteSheet(),
-                shipSprite.x, shipSprite.y, shipSprite.width, shipSprite.height,
-                player.x + offset - player.size / 2, player.y - player.size / 2, player.size, player.size
-            );
-        }
+      renderer.render(scene,camera); drawHUD();
     }
 
-   function drawShield() {
-        if (shieldTime <= 0) return;
-
-        shieldHue = (shieldHue + 5) % 360; // Slower cycle
-        shieldRotation += 0.05; // Slower rotation
-        const shieldLineWidth = 4;
-        const shieldColor = `hsl(${shieldHue}, 100%, 60%)`;
-
-        ctx.strokeStyle = shieldColor;
-        ctx.lineWidth = shieldLineWidth;
-        ctx.shadowColor = shieldColor;
-        ctx.shadowBlur = 10;
-
-        let radius;
-        if (shipCount === 1) {
-            radius = player.size * 0.7; // Slightly larger than ship
-        } else {
-            // Encompass both ships
-            const span = (player.size * 0.7) * 2 + player.size; // Total width occupied by ships
-            radius = span * 0.6; // Adjust for visual fit
-        }
-
-        const gapAngle = Math.PI / 6; // Smaller gap
-        const startAngle = shieldRotation + gapAngle;
-        const endAngle = shieldRotation + Math.PI * 2;
-
-        ctx.beginPath();
-        ctx.arc(player.x, player.y, radius, startAngle, endAngle);
-        ctx.stroke();
-
-        // Reset shadow
-        ctx.shadowBlur = 0;
-
-        // Draw Shield Timer Bar
-        const barMaxWidth = 150;
-        const barHeight = 15;
-        const barX = 20;
-        const barY = canvas.height - barHeight - 15;
-        const shieldPercent = shieldTime / config.powerUps.shieldDuration;
-        const currentBarWidth = barMaxWidth * shieldPercent;
-
-        ctx.fillStyle = "rgba(0, 0, 0, 0.5)"; // Bar background
-        ctx.fillRect(barX, barY, barMaxWidth, barHeight);
-        ctx.fillStyle = shieldColor; // Use shield color for fill
-        ctx.fillRect(barX, barY, currentBarWidth, barHeight);
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
-        ctx.lineWidth = 1;
-        ctx.strokeRect(barX, barY, barMaxWidth, barHeight);
-
-        // Draw timer text
-        ctx.fillStyle = "#fff";
-        ctx.font = "14px Orbitron";
-        ctx.textAlign = "left";
-        ctx.textBaseline = "middle";
-        ctx.fillText(Math.ceil(shieldTime / 60) + "s", barX + barMaxWidth + 10, barY + barHeight / 2);
+    startTime = performance.now();
+    for(let i=0;i<3;i++) createTarget(true);
+    for(let i=0;i<1;i++) createTarget(false);
+    lastSpawnTime = performance.now();
+    animate(performance.now());
+  }
+  
+  window.addEventListener('resize', () => {
+    if (!window.renderer || !window.camera) return;
+    window.camera.aspect = window.innerWidth / window.innerHeight;
+    window.camera.updateProjectionMatrix();
+    window.renderer.setSize(window.innerWidth, window.innerHeight);
+    const hud = document.getElementById('hud');
+    if (hud) {
+      hud.width = window.innerWidth;
+      hud.height = window.innerHeight;
     }
-
-  // ---- Scoring and Combo ----
-  function triggerCombo() {
-      comboCount++;
-      comboTimer = config.combo.resetFrames;
-      updateScoreboard();
-  }
-
-  function updateCombo() {
-      if (comboCount > 0) {
-          comboTimer--;
-          if (comboTimer <= 0) {
-              comboCount = 0;
-              updateScoreboard();
-          }
-      }
-  }
-
-  function checkHighScore() {
-      if (score > highScore) {
-          highScore = score;
-          localStorage.setItem('highScore', highScore);
-          updateScoreboard();
-      }
-  }
-
-
-  // ---- Game Loop ----
-  function updateGame() {
-      if (!gameActive || paused) return;
-      frameCount++; // Increment frame counter
-
-      // Backgrounds
-      updateStarLayers();
-      updateNebula();
-
-      // Player related
-      createAmbientParticle(); // Spawn based on chance
-      if (shieldTime > 0) shieldTime--;
-      updateCombo();
-
-      // Game objects
-      updateBullets();
-      updateEnemies();
-      updatePowerUps(); // Includes spawning checks
-      updateParticles(particles);
-      updateParticles(ambientParticles);
-  }
-
-  function drawGame() {
-      // Clear canvas
-      ctx.fillStyle = '#000'; // Ensure background is black
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // Background elements
-      drawStarLayers();
-      drawNebula();
-
-      // Game objects
-      drawPowerUps();
-      drawEnemies(); // Draw before player/bullets
-      drawBullets();
-      drawPlayer(); // Draw player on top of most things
-
-      // Effects
-      drawParticles(particles); // Explosions etc.
-      drawParticles(ambientParticles); // Player trail
-      drawShield(); // Draw shield last over player
-
-      // UI is handled by HTML/CSS overlays + scoreboard updates
-  }
-
-  function gameLoop(timestamp) {
-      if (!gameStarted) return; // Stop loop if game ended abruptly
-
-      updateGame();
-      drawGame();
-
-      requestAnimationFrame(gameLoop);
-  }
-
-  // ---- Game State Management ----
-  function startGame() {
-      console.log("Starting game...");
-      score = 0;
-      lives = config.initialLives;
-      shieldTime = 0;
-      comboCount = 0;
-      comboTimer = 0;
-      shipCount = 1;
-      nextExtraShipScore = config.powerUps.extraShipScoreInterval;
-      nextLargeMeteorScore = config.largeMeteor.spawnScoreInterval;
-      currentEnemySpawnRate = config.enemies.spawnRateInitial;
-      frameCount = 0;
-      lastShotFrame = -config.player.shootCooldown; // Allow immediate first shot
-
-
-      // Clear game object arrays
-      enemies.length = 0;
-      bullets.length = 0;
-      particles.length = 0;
-      ambientParticles.length = 0;
-      powerUps.length = 0;
-      extraShips.length = 0;
-
-      // Reset player position
-      player.x = canvas.width / 2;
-      player.y = canvas.height - 100; // Consistent starting position
-
-      updateScoreboard();
-
-      gameActive = true;
-      paused = false;
-      pauseScreen.style.display = "none"; // Ensure pause screen is hidden
-
-      initStarLayers(); // Reinitialize stars for fresh look
-
-      assetManager.playMusic(); // Start/resume music
-
-      // Start enemy spawning
-      scheduleEnemySpawn();
-
-      if (!gameStarted) {
-          gameStarted = true;
-          requestAnimationFrame(gameLoop); // Start the main loop
-      }
-  }
-
-  function gameOver() {
-      console.log("Game Over!");
-      gameActive = false;
-       assetManager.stopMusic(); // Stop music
-       if (enemySpawnTimerId) clearTimeout(enemySpawnTimerId); // Stop spawning
-
-      // Maybe show a "Game Over" message briefly on canvas?
-      ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = "red";
-      ctx.font = "bold 48px Orbitron";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2);
-       ctx.font = "24px Orbitron";
-       ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 50);
-
-
-      // Show start screen again after a delay
-      setTimeout(() => {
-          startScreen.style.display = "flex";
-          startMessage.innerHTML = "<strong>Click anywhere to RESTART</strong>";
-          startMessage.classList.add('ready'); // Ensure clickable
-          gameStarted = false; // Allow gameLoop to fully stop
-      }, 3000); // 3 second delay
-  }
-
-  // ---- Initialization ----
-  function init() {
-      setupCanvas();
-      setupUI();
-
-      // Start loading assets and provide callback
-      assetManager.loadAssets(() => {
-          // This runs when all assets are loaded
-          startMessage.innerHTML = "<strong>Click anywhere to START</strong>";
-          startMessage.classList.add('ready'); // Make it obvious it's clickable
-          // Optionally, draw a static frame or logo while waiting for click
-          drawInitialFrame(); // Draw stars etc. once loaded
-      });
-  }
-
-    // Draw a static background frame while waiting for the user to start
-    function drawInitialFrame() {
-        ctx.fillStyle = '#000';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        if (!starLayers.foreground.length) initStarLayers(); // Init if needed
-        drawStarLayers();
-        // Maybe draw player ship dimmed?
-    }
-
-  // Start the setup process when the DOM is ready
-  window.addEventListener('DOMContentLoaded', init);
-
-})(); // End of IIFE
+    handleOrientation(); // Re-check orientation on resize
+  });
+  </script>
+</body>
+</html>
